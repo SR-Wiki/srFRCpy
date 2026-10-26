@@ -30,6 +30,9 @@ The framework addresses these problems with **single-frame FRC (sFRC)** and **si
 
 ## Installation
 
+### Tested platform
+  - Windows 10, Python = 3.10.0
+
 ### 1. Clone or download the repository
 
 ```bash
@@ -87,9 +90,9 @@ The demo's plot/save switches are at the top of the script. Saving disabled
 means no output files or directories; plotting disabled still allows numeric export.
 
 ```bash
-python demos/sFRC_demo.py
-python demos/sFSC_demo.py
-python demos/srFRC_demo.py
+python demos/sFRC_demo.ipynb
+python demos/sFSC_demo.ipynb
+python demos/srFRC_demo.ipynb
 ```
 
 Python sampling is in nm; stacks use TYX and sFSC volumes ZYX with spacing

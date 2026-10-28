@@ -1,4 +1,5 @@
 import warnings
+import time
 from src.utils.input_image import normalize_image
 import numpy as np
 from src.utils.image_operations import (
@@ -163,6 +164,8 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
         extrapolation_triggered, extrapolation_stage, lateral_resolution_nm,
         axial_resolution_nm, and E_DRI_percent. lateral_curve, selected_plane,
         parameters, and z_sampling_enabled provide the associated context.
+        computation_time_seconds stores total numerical time, while
+        stage_elapsed_seconds contains only lateral and axial seconds.
     
     Notes
     -----
@@ -192,6 +195,8 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
                     single_frame=bool(single_frame),z_sampling=bool(z_sampling),
                     low_angle=low_angle,high_angle=high_angle,num_cones=num_cones,
                     threshold=threshold,xy_mode=xy_mode,motion_correction=bool(motion_correction))
+    computation_started = time.perf_counter()
+    lateral_started = computation_started  # Include input preparation in lateral timing.
     im1 = normalize_image(im1)
     if im2 is not None:
         im2 = normalize_image(im2)
@@ -282,6 +287,11 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
         erf.z_sampling_enabled=bool(z_sampling)
         erf.lateral_curve=selected_frc
         erf.selected_plane=selected_plane
+        lateral_seconds = time.perf_counter() - lateral_started
+        erf.computation_time_seconds = time.perf_counter() - computation_started
+        erf.stage_elapsed_seconds = dict(lateral=lateral_seconds, axial=0.0)
+        print(f'sFSC - numerical computation time: {erf.computation_time_seconds:.3f} s '
+              '(axial computation unavailable; excludes plotting and file export).')
         return erf
 
     if xy_mode == 'slice' and selected_plane is not None:
@@ -296,6 +306,8 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
         print('sFSC - lateral: No lateral threshold crossing was found in the measured range. Automatic 1/7 extrapolation provided the lateral estimate.')
     print(f'\nsFSC - lateral resolution: {xy_resolution:.2f} nm')
 
+    lateral_seconds = time.perf_counter() - lateral_started
+    axial_started = time.perf_counter()
     print('sFSC - axial: estimating resolution with DRI...')
     if z_sampling:
         im1, im2 = pad2even(im1), pad2even(im2)
@@ -346,6 +358,13 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
     erf.parameters=parameters
     erf.lateral_curve=selected_frc
     erf.selected_plane=selected_plane
+    axial_seconds = time.perf_counter() - axial_started
+    erf.computation_time_seconds = time.perf_counter() - computation_started
+    erf.stage_elapsed_seconds = dict(lateral=lateral_seconds, axial=axial_seconds)
+    print(f'sFSC - numerical computation time: {erf.computation_time_seconds:.3f} s '
+          '(excludes plotting and file export).')
+    for name, seconds in erf.stage_elapsed_seconds.items():
+        print(f'  {name}: {seconds:.3f} s')
     if np.isfinite(z_resolution):
         polar_plot(erf,show=True)
     if plot_fitting_curve and np.isfinite(z_resolution):

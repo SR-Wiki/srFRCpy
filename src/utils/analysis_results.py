@@ -197,7 +197,7 @@ def resolve_plot(requested, batch_processing):
 
 
 def current_result_index(count, batch_processing, current_frame, single_frame=True, notify=True):
-    """Locate the current-frame result without changing the computation batch.
+    """Locate the sole plot preview without changing the computation batch.
 
     Parameters
     ----------
@@ -206,7 +206,7 @@ def current_result_index(count, batch_processing, current_frame, single_frame=Tr
     batch_processing : bool
         True for a complete batch; False for one already selected result.
     current_frame : int
-        Zero-based input frame. Paired mode uses this frame and the next one.
+        Retained for compatibility. Ignored in batch preview selection.
     single_frame : bool
         Select one frame rather than an adjacent pair. {default: True}
     notify : bool
@@ -216,21 +216,12 @@ def current_result_index(count, batch_processing, current_frame, single_frame=Tr
     Returns
     -------
     int or None
-        Index of the sole displayed result, or None when no such result exists.
-        Batch numerical results are retained even when a preview is unavailable.
+        Index of the sole displayed result, or None when no result exists.
+        Batch mode previews its first computed frame/pair.
     """
-    if count > 0 and not batch_processing:
-        return 0
-    if (isinstance(current_frame, (int, np.integer))
-            and not isinstance(current_frame, (bool, np.bool_))
-            and 0 <= current_frame < count):
-        return int(current_frame)
-    if notify:
-        detail = ('Choose a valid zero-based current_frame.' if single_frame else
-                  'The current frame needs a following frame for a paired preview.')
-        print('No current-frame plot is available. ' + detail + ' All computed batch results are retained.')
-    return None
-
+    # Python has no active Fiji-style stack cursor. The first computed
+    # frame/pair is the batch preview; an individual run previews its sole result.
+    return 0 if count > 0 else None
 
 def finalize_resolution_map(map_data, original_pixel_size_nm=None):
     """Apply background cleanup and the acquisition-based map lower bound.

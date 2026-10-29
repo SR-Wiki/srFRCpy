@@ -1,3 +1,4 @@
+from src.utils import fft_backend
 import numpy as np
 from src.utils.image_operations import diagonal_resample
 from src.utils.window_functions import hanning_2d
@@ -55,7 +56,7 @@ def sFRC(im1,im2=None,pixel_size=None,mean_filter_width=3,single_frame=True,
         '1/7 hard threshold' or '3-sigma'. fixed_threshold and 1/7 are legacy
         aliases of the fixed criterion. {default: '1/7 hard threshold'}
     plot : bool or str
-        'auto' and True show only current_frame, with or without batching. Paired
+        'auto' and True show the first frame/pair in batch mode, or the selected result otherwise. Paired
         mode shows one calculation for that frame and the next frame. False
         hides plots without changing the computation batch. {default: 'auto'}
     stack_axis : int
@@ -98,14 +99,19 @@ def sFRC(im1,im2=None,pixel_size=None,mean_filter_width=3,single_frame=True,
     threshold=normalize_threshold(threshold)
     im1=normalize_image(im1)
     if not single_frame and im2 is not None:im2=normalize_image(im2)
+    # current_frame is used only for individual (non-batch) selection.
+    if batch_processing:
+        current_frame = 0
     pairs=frame_pairs(im1,im2,single_frame,stack_axis,batch_processing,current_frame)
     plot=resolve_plot(plot,batch_processing)
     plot_index=current_result_index(len(pairs),batch_processing,current_frame,single_frame,notify=plot)
     parameters=dict(pixel_size_nm=spacing.tolist(),mean_filter_width=mean_filter_width,
                     single_frame=bool(single_frame),threshold=threshold,
                     stack_axis=stack_axis,motion_correction=bool(motion_correction),
-                    batch_processing=bool(batch_processing),current_frame=current_frame,
+                    batch_processing=bool(batch_processing),
                     plot=plot,plot_index=plot_index)
+    if not batch_processing:
+        parameters['current_frame'] = current_frame
     curves=[]
     for result_index,(first,second,label) in enumerate(pairs):
         analysis_spacing=spacing[1]
@@ -115,8 +121,8 @@ def sFRC(im1,im2=None,pixel_size=None,mean_filter_width=3,single_frame=True,
         elif motion_correction:
             first,second=drift_correct(first,second,analysis_spacing)
         hn=hanning_2d(*first.shape)
-        curve=perform_frc(np.fft.fftshift(np.fft.fft2(first*hn)),
-                          np.fft.fftshift(np.fft.fft2(second*hn)),analysis_spacing,
+        curve=perform_frc(fft_backend.fftshift(fft_backend.fft2(first*hn)),
+                          fft_backend.fftshift(fft_backend.fft2(second*hn)),analysis_spacing,
                           single_frame=single_frame,mean_filter_width=mean_filter_width,extrapolation=True)
         curve.calculate_resolution(threshold=threshold)
         extrapolation_notice(curve,threshold,f'sFRC - {label}')

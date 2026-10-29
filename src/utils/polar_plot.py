@@ -27,7 +27,7 @@ def polar_plot(erf, use_valid=False, save_path=None, show=False):
     
     Parameters
     ----------
-    erf : EllipticalResolutionFitting
+    erf : DirectionalResolutionInference
         Fitted lateral/axial resolution model.
     use_valid : bool
         Compatibility flag; measured points are currently omitted from the polar

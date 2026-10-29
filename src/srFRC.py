@@ -1,3 +1,4 @@
+from src.utils import fft_backend
 import os
 from src.utils.input_image import normalize_image
 from src.utils.analysis_results import (frame_pairs,restore_map_size,map_statistics,
@@ -8,7 +9,7 @@ from src.utils.drift_correct import drift_correct
 from src.utils.image_operations import *
 from skimage import filters
 from src.utils.window_functions import hanning_2d
-import numpy.fft as ft
+from src.utils import fft_backend as ft
 from src.utils.correlations import perform_frc
 import matplotlib.pyplot as plt
 from src.utils.shifted_jet import sjet_colorbar
@@ -21,6 +22,37 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 from tqdm import tqdm
 import multiprocessing as mp
+
+
+
+# Initialized once in each worker process; task messages then contain only patch
+# bounds, not two full padded images or the analysis object.
+_ROLLING_WORKER_STATE = None
+
+
+def _init_rolling_worker(analyzer, raw_a, raw_b, shape, dtype, threshold, hm):
+    global _ROLLING_WORKER_STATE
+    a = np.frombuffer(raw_a, dtype=np.dtype(dtype)).reshape(shape)
+    b = np.frombuffer(raw_b, dtype=np.dtype(dtype)).reshape(shape)
+    _ROLLING_WORKER_STATE = (analyzer, a, b, threshold, hm)
+
+
+def _run_rolling_patch(bounds):
+    analyzer, pad_a, pad_b, threshold, hm = _ROLLING_WORKER_STATE
+    return analyzer._process_patch(
+        bounds, pad_a, pad_b, threshold, analyzer.block_size, analyzer.skip,
+        analyzer.single_frame, analyzer._analysis_pixel_size, hm)
+
+
+def _shared_copy(array):
+    # RawArray is backed by OS shared memory, works with spawn on Windows.
+    array = np.ascontiguousarray(array)
+    dtype = np.dtype('float32') if array.dtype == np.float32 else np.dtype('float64')
+    if array.dtype != dtype:
+        array = array.astype(dtype)
+    raw = mp.RawArray('f' if dtype == np.float32 else 'd', array.size)
+    np.frombuffer(raw, dtype=dtype)[:] = array.ravel()
+    return raw, str(dtype)
 
 
 class RollingFourierRingCorrelation:
@@ -56,7 +88,7 @@ class RollingFourierRingCorrelation:
             Side length of a spatial patch assigned to a worker, in pixels.
             {default: 64}
         plot : bool or str
-            'auto' and True show only current_frame, with or without batching.
+            'auto' and True show the first frame/pair in batch mode, or the selected result otherwise.
             Paired mode shows one calculation for that frame and the next frame.
             False hides maps without changing the batch. {default: 'auto'}
         stack_axis : int
@@ -69,7 +101,7 @@ class RollingFourierRingCorrelation:
             Process every available frame or adjacent pair; False selects current_frame
             only. {default: True}
         current_frame : int
-            Zero-based preview frame; also selects computation when batching is False. A pair
+            Zero-based selected frame in non-batch mode only; ignored in batches. A pair
             needs the following frame. {default: 0}
         threshold : str
             Primary criterion: '1/7 hard threshold' or '3-sigma'. Existing calibrated
@@ -84,7 +116,7 @@ class RollingFourierRingCorrelation:
         -----
         pixel_size always refers to the original acquisition spacing. block_size is
         rounded up to an even integer; skip is capped at half the block size. Batch
-        processing is enabled by default; only current_frame is previewed. Automatic background uses
+        processing is enabled by default; only the first frame/pair is previewed in batch mode. Automatic background uses
         1.2 times Otsu. monitor_change=True disables adaptive_background and
         independently compares 0.8, 1.0, and 1.2 times Otsu. Manual background is
         used only when both switches are False, on a 0-255 intensity scale. The maintained
@@ -95,7 +127,7 @@ class RollingFourierRingCorrelation:
         self.threshold = normalize_threshold(threshold)
         self._analysis_pixel_size = self.pixel_size
         self.plot=resolve_plot(plot,batch_processing)
-        self.batch_processing,self.current_frame=batch_processing,current_frame
+        self.batch_processing,self.current_frame=batch_processing,(0 if batch_processing else current_frame)
         self.stack_axis,self.motion_correction=stack_axis,motion_correction
         if self.pixel_size<=0 or not np.isfinite(self.pixel_size):raise ValueError('Enter a positive, finite pixel_size in nm.')
         if block_size<2 or skip<1 or patch_size<1:raise ValueError('Choose block_size >= 2, skip >= 1, and patch_size >= 1.')
@@ -104,7 +136,7 @@ class RollingFourierRingCorrelation:
         self.monitor_change = bool(monitor_change)
         self.adaptive_background = bool(adaptive_background) and not self.monitor_change
         if self.monitor_change:
-            print('srFRC - background mode: monitor_change=True disables adaptive_background. Comparing Otsu multipliers 0.8, 1.0, and 1.2; background_threshold is ignored.')
+            print('srFRC - background monitoring enabled. The absolute background threshold for each result is reported after computation; the manual threshold is ignored.')
         self.skip = skip
         self.single_frame = single_frame
         self.drift_correct = not self.single_frame
@@ -133,8 +165,10 @@ class RollingFourierRingCorrelation:
             monitor_change=self.monitor_change,background_threshold=background_threshold,
             skip=skip,parallel=bool(parallel),patch_size=patch_size,stack_axis=stack_axis,
             motion_correction=bool(motion_correction),
-            batch_processing=bool(batch_processing),current_frame=current_frame,
+            batch_processing=bool(batch_processing),
             plot=self.plot,minimum_resolution_nm=2.3*self.pixel_size)
+        if not batch_processing:
+            self.parameters['current_frame'] = current_frame
 
     def get_rfrc_map(self,background=None):
         """Return the latest completed resolution map.
@@ -228,6 +262,24 @@ class RollingFourierRingCorrelation:
                 r['mean_resolution_nm'],r['rFRC_value']] for r in groups[label]])
             output[label]=values[0] if len(values)==1 else values
         return output[labels[0]] if len(labels)==1 else output
+
+    def print_summary(self):
+        """Print per-frame srFRC statistics with absolute background thresholds.
+
+        Internal background-group keys are intentionally unchanged for saved
+        maps, timings, and backward-compatible programmatic access.
+        """
+        if not getattr(self, 'metrics', None):
+            raise RuntimeError('Run execute(image) before printing an srFRC summary.')
+        print('srFRC - native-grid results (background intensity scale 0-255):')
+        for row in self.metrics:
+            print(
+                f"  {row['frame']}: Background threshold = {row['background_threshold']:.2f}; "
+                f"mean = {row['mean_resolution_nm']:.2f} nm; "
+                f"min = {row['min_resolution_nm']:.2f} nm; "
+                f"max = {row['max_resolution_nm']:.2f} nm; "
+                f"rFRC = {row['rFRC_value']:.3f}"
+            )
 
     def execute(self,image1,image2=None):
         """Compute rolling resolution maps and per-frame summaries from image arrays.
@@ -323,9 +375,14 @@ class RollingFourierRingCorrelation:
         self.elapsed_seconds = self.computation_time_seconds
         print(f'srFRC - numerical computation time: {self.computation_time_seconds:.3f} s '
               '(excludes plotting and file export).')
-        for setting, seconds in self.background_elapsed_seconds.items():
-            print(f'  {setting}: {seconds:.3f} s')
-        print('srFRC - completed '+str(len(self.rfrc_maps))+' background group(s): '+', '.join(self.rfrc_maps)+'.')
+        for group_number, (setting, seconds) in enumerate(self.background_elapsed_seconds.items(), start=1):
+            group_rows = [row for row in self.metrics if row['background_setting'] == setting]
+            thresholds = ', '.join(
+                f"{row['frame']}: Background threshold = {row['background_threshold']:.2f}"
+                for row in group_rows
+            )
+            print(f'  Background group {group_number}: {thresholds}; computation time = {seconds:.3f} s')
+        print(f'srFRC - completed {len(self.rfrc_maps)} background group(s).')
         if self.plot:
             figure=plot_srfrc_results(self,show=True)
             if figure is not None:
@@ -439,6 +496,9 @@ class RollingFourierRingCorrelation:
         rfrc_map = np.zeros((h, w), dtype='float32')
         size_padded = max(128, self.block_size)
         pad_factor = 1
+        # Window geometry is constant for every rolling position.
+        hm = (hanning_2d(size_padded, size_padded) if self.single_frame
+              else hanning_2d(self.block_size, self.block_size))
 
         total_blocks = h * w / self.skip / self.skip
         progress_bar = tqdm(total=total_blocks, desc="rolling resolution calculation", unit="pixel")
@@ -460,9 +520,6 @@ class RollingFourierRingCorrelation:
                         im1_roi = create_padded_image(im1_roi, size_padded, size_padded)
                         im2_roi = create_padded_image(im2_roi, size_padded, size_padded)
                         pad_factor = math.sqrt(size_padded / self.block_size)
-                        hm = hanning_2d(size_padded, size_padded)
-                    else:
-                        hm = hanning_2d(self.block_size, self.block_size)
                     ffta = ft.fftshift(ft.fft2(im1_roi * hm))
                     fftb = ft.fftshift(ft.fft2(im2_roi * hm))
                     frc_data = perform_frc(ffta, fftb, self._analysis_pixel_size, single_frame=self.single_frame)
@@ -520,33 +577,25 @@ class RollingFourierRingCorrelation:
         print(f"Processing {total_patches} patches...")
 
         rfrc_map = np.zeros((h, w), dtype=np.float32)
-        with mp.Pool(processes=min(mp.cpu_count(), max(1,total_patches))) as pool:
-            # Bind the shared arguments to the processing function.
-            process_patch = partial(
-                self._process_patch,
-                pad_im1=pad_im1,
-                pad_im2=pad_im2,
-                threshold=threshold,
-                block_size=self.block_size,
-                skip=self.skip,
-                single_frame=self.single_frame,
-                pixel_size=self._analysis_pixel_size,
-                hm=hm,
-            )
-
-            # Submit all patch tasks.
-            results = []
+        # Copy each complete input into shared memory ONCE per map. With a spawn
+        # start method, each worker attaches to the same buffers; only small
+        # four-integer bounds tuples are sent to each patch task.
+        shared_a, dtype_a = _shared_copy(pad_im1)
+        shared_b, dtype_b = _shared_copy(pad_im2)
+        if dtype_a != dtype_b:
+            raise ValueError('Paired padded images must have matching dtypes')
+        process_count = min(mp.cpu_count(), max(1, total_patches))
+        with mp.Pool(processes=process_count, initializer=_init_rolling_worker,
+                     initargs=(self, shared_a, shared_b, pad_im1.shape,
+                               dtype_a, threshold, hm)) as pool:
             with tqdm(total=total_patches, desc="patch processing", unit="patch") as pbar:
-                for result in pool.imap_unordered(process_patch, patches):
-                    results.append(result)
+                for patch_result in pool.imap_unordered(_run_rolling_patch, patches):
+                    if patch_result is not None:
+                        y_start, x_start, patch_map = patch_result
+                        height, width = patch_map.shape
+                        rfrc_map[y_start:y_start + height,
+                                 x_start:x_start + width] = patch_map
                     pbar.update(1)
-
-        # Merge patch results, including pixels at the boundaries.
-        for patch_result in results:
-            if patch_result is not None:
-                y_start, x_start, patch_map = patch_result
-                height, width = patch_map.shape
-                rfrc_map[y_start:y_start + height, x_start:x_start + width] = patch_map
         print("srFRC - parallel map calculation complete.")
         return rfrc_map, threshold
 
@@ -654,8 +703,8 @@ class RollingFourierRingCorrelation:
                     im2_block_norm = create_padded_image(im2_block_norm, size_padded, size_padded)
                     pad_factor = math.sqrt(size_padded / block_size)
 
-                ffta = np.fft.fftshift(np.fft.fft2(im1_block_norm * hm))
-                fftb = np.fft.fftshift(np.fft.fft2(im2_block_norm * hm))
+                ffta = fft_backend.fftshift(fft_backend.fft2(im1_block_norm * hm))
+                fftb = fft_backend.fftshift(fft_backend.fft2(im2_block_norm * hm))
                 frc_data = perform_frc(ffta, fftb, pixel_size, single_frame=single_frame)
                 resolution = self._local_resolution(frc_data,pad_factor)
                 patch_map[local_y:local_y + skip, local_x: local_x + skip] = resolution

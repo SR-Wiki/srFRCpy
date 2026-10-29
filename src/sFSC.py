@@ -1,3 +1,4 @@
+from src.utils import fft_backend
 import warnings
 import time
 from src.utils.input_image import normalize_image
@@ -10,7 +11,7 @@ from src.utils.correlations import perform_frc
 from tqdm import tqdm
 from src.utils.polar_plot import polar_plot
 from src.utils.drift_correct import drift_correct
-from src.utils.elliptical_resolution_fitting import EllipticalResolutionFitting
+from src.utils.directional_resolution_inference import DirectionalResolutionInference
 from src.utils.analysis_results import (DRI_GUIDANCE,dri_interpretation,with_sfsc_dri_guidance,
                                     normalize_threshold)
 from src.utils.sfsc_guidance import validate_num_cones, ANGLE_GUIDANCE, resolve_z_sampling, angle_range_notice, z_sampling_note
@@ -158,7 +159,7 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
     
     Returns
     -------
-    EllipticalResolutionFitting
+    DirectionalResolutionInference
         Result with lateral/axial resolutions in nm, angular samples in radians, cutoffs
         in 1/um, and goodness_of_fit as a relative fraction. summary includes
         extrapolation_triggered, extrapolation_stage, lateral_resolution_nm,
@@ -231,8 +232,8 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
         best = np.inf
         progress_bar = tqdm(total=len(planes_xy), desc='slice-based lateral resolution estimation', unit='plane')
         for i in planes_xy:
-            ffta = np.fft.fftshift(np.fft.fft2(im1[i] * hn))
-            fftb = np.fft.fftshift(np.fft.fft2(im2[i] * hn))
+            ffta = fft_backend.fftshift(fft_backend.fft2(im1[i] * hn))
+            fftb = fft_backend.fftshift(fft_backend.fft2(im2[i] * hn))
             frc_data = perform_frc(
                 ffta, fftb, analysis_pixel_size[1],
                 single_frame=single_frame,
@@ -256,8 +257,8 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
             xy_resolution = best
     else:
         hn = hanning_3d(d, h, w)
-        ffta = np.fft.fftshift(np.fft.fftn(im1 * hn))
-        fftb = np.fft.fftshift(np.fft.fftn(im2 * hn))
+        ffta = fft_backend.fftshift(fft_backend.fftn(im1 * hn))
+        fftb = fft_backend.fftshift(fft_backend.fftn(im2 * hn))
         zc = d // 2
         selected_frc = perform_frc(
             ffta[zc, :, :], fftb[zc, :, :], min_spacing,
@@ -276,7 +277,7 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
         warnings.warn(f'sFSC - lateral: {detail}. Axial resolution and E_DRI are unavailable; check the pixel size and threshold. {DRI_GUIDANCE}',
                       RuntimeWarning,stacklevel=2)
         # Preserve the usual return type, marking all unavailable quantities.
-        erf=EllipticalResolutionFitting(max_spacing,1,single_frame=single_frame,z_sampling=z_sampling,
+        erf=DirectionalResolutionInference(max_spacing,1,single_frame=single_frame,z_sampling=z_sampling,
             low_angle=low_angle,high_angle=high_angle,num_cones=num_cones,threshold=threshold)
         erf.xy_resolution,erf.xy_cutoff,erf.z_resolution,erf.z_cutoff=np.nan,np.nan,np.nan,np.nan
         erf.angles,erf.cutoffs=np.empty(0),np.empty(0)
@@ -326,11 +327,11 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
     tmp_im1, tmp_im2 = pad2cube(tmp_im1), pad2cube(tmp_im2)
     # d, h, w = tmp_im1.shape
     # hn = hanning_3d(d, h, w)
-    ffta = np.fft.fftshift(np.fft.fftn(tmp_im1))
-    fftb = np.fft.fftshift(np.fft.fftn(tmp_im2))
+    ffta = fft_backend.fftshift(fft_backend.fftn(tmp_im1))
+    fftb = fft_backend.fftshift(fft_backend.fftn(tmp_im2))
 
     print('sFSC - DRI: fitting directional cutoffs...')
-    erf = EllipticalResolutionFitting(
+    erf = DirectionalResolutionInference(
         max_spacing, xy_resolution,
         single_frame=single_frame,
         z_sampling=z_sampling,

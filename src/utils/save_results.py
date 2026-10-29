@@ -213,7 +213,7 @@ def save_srfrc_results(analysis,plot='auto'):
                 fig,ax=plt.subplots(figsize=(8,5))
                 artist=ax.imshow(data,cmap=sjet_colorbar(),vmin=0,vmax=display_maximum(analysis,result_index))
                 label=row['frame']
-                ax.set_title(f'srFRC - resolution map - {label} - {setting}');ax.axis('off')
+                ax.set_title(f'srFRC - resolution map - {label}\nBackground threshold = {row.get("background_threshold", float("nan")):.1f}');ax.axis('off')
                 fig.colorbar(artist,ax=ax,label='Resolution (nm)')
                 fig.savefig(directory/f'srFRC_{label}_{setting}_resolution-map.png',dpi=160,bbox_inches='tight')
                 plt.close(fig)

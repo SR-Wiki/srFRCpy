@@ -50,7 +50,7 @@ def plot_srfrc_results(analysis, show=True):
                           getattr(analysis,'final_background_thresholds',{}).get(setting,[float('nan')])[index]))
         ax_map=axes[0,column]
         artist=ax_map.imshow(maps[index],cmap=sjet_colorbar(),vmin=0,vmax=upper,origin='upper')
-        ax_map.set_title(f'srFRC - resolution map - {label} - {setting}\nBackground threshold = {value:.1f}')
+        ax_map.set_title(f'srFRC - resolution map - {label}\nBackground threshold = {value:.1f}')
         ax_map.set_axis_off()
     fig.colorbar(artist,ax=list(axes[0]),fraction=0.025,pad=0.025,label='Resolution (nm)')
     if is_monitor:

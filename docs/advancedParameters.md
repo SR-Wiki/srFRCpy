@@ -149,7 +149,7 @@ extrapolation_triggered, and resolution_nm. Labels use `frame0001` or
 
 ## sFSC
 
-Lateral and axial resolution estimation for 3D volumes, with DRI.
+Lateral and axial resolution estimation for 3D volumes using directional resolution inference (DRI).
 
 ### sFSC input and calibration
 
@@ -170,7 +170,7 @@ DRI angle parameters are in degrees and measured from the XY plane.
 | `single_frame` | `True` | Generate an XY-resampled pair from one volume |
 | `threshold` | `'1/7 hard threshold'` | Only alternative: `'3-sigma'` |
 | `mean_filter_width` | `3` | Correlation smoothing radius in frequency bins |
-| `plot_fitting_curve` | `False` | Additionally display the DRI elliptical-fit figure; the resolution profile is always displayed |
+| `plot_fitting_curve` | `False` | Additionally display the DRI fit diagnostics; the anisotropic resolution profile is always displayed |
 | `xy_mode` | `'slice'` | Lateral estimation from slices; `'3D'` uses the central Fourier plane |
 | `motion_correction` | `False` | Align paired inputs; not used for single-frame pair generation |
 
@@ -202,10 +202,14 @@ failed attempts. It also records `extrapolation_stage`: `none`, `lateral`,
 the flag alone does not prove that the final selected curve was extrapolated.
 Inspect the notices and returned curve/fit information.
 
-### E_DRI: what the value means
+### Directional resolution inference (DRI) and E_DRI
 
-DRI fits an elliptical frequency model using the lateral anchor and selected
-directional cutoffs. E_DRI is the cosine-weighted relative RMS fitting error:
+DRI infers the axial frequency cutoff by fitting a smooth directional
+frequency-support model to selected non-paraxial cutoff measurements, with
+the independently estimated lateral cutoff held fixed. The underlying
+frequency-support model has an elliptical form; **DRI** refers to the
+inference procedure as a whole. E_DRI is the cosine-weighted relative
+RMS fitting error:
 
 $$
 E_{\mathrm{DRI}}=
@@ -215,7 +219,7 @@ E_{\mathrm{DRI}}=
 $$
 
 Here, `theta` is measured from the XY plane, `k_i` is a directional cutoff
-used in the fit, and `k_fit,i` is predicted by the fitted ellipse. This checks
+used in the fit, and `k_fit,i` is predicted by the fitted DRI model. This checks
 model consistency; it is not a ground-truth resolution error or confidence
 interval. Few usable directions or an incorrect calibration can still make a
 low-error result unreliable.
@@ -303,9 +307,10 @@ The guide stays in textual output rather than adding repetitive CSV columns.
 
 ### sFSC results, plotting and saved files
 
-`sFSC(...)` returns an `EllipticalResolutionFitting` result. Its compact
-summary records singleframe, threshold, extrapolation trigger/stage,
-lateral/axial resolution in nm, and E_DRI in percent. Z-sampling status
+`sFSC(...)` returns an sFSC result object containing the DRI-based lateral
+and axial resolution estimates. Its compact summary records singleframe,
+threshold, extrapolation trigger/stage, lateral/axial resolution in nm,
+and E_DRI in percent. Z-sampling status
 and interpretation notes remain in the result fields and metadata.
 An available lateral/axial resolution profile is always displayed. There is
 no `plot` argument or `plot_results` demo setting for sFSC.
@@ -319,7 +324,12 @@ sFSC uses a 3D volume/pair and has no 2D-stack batch switch.
 | Numerical DRI data | `sFSC_DRI-data.npz` |
 | Interpretation | `sFSC_E-DRI-guidance.txt` |
 | Resolution preview (when available) | `sFSC_lateral-axial-resolution.png` |
-| Optional additional fit preview | `sFSC_DRI-elliptical-fit.png` |
+| Optional additional DRI-fit preview | `sFSC_DRI-elliptical-fit.png` (current legacy export filename) |
+
+The optional PNG filename above is retained for compatibility with the current
+`src/utils/save_results.py` implementation. It refers to the **DRI fit**, not
+a separate elliptical-resolution-fitting method; rename it in the code
+and this guide together if the exported filename is updated.
 
 ## srFRC
 

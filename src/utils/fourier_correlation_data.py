@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 from src.utils.curve_extrpolation import frc_extrapolation
 
 
@@ -345,60 +344,9 @@ class FourierCorrelationData:
             self.five_sigma = self.five_sigma
 
     def plot_results(self, threshold='fixed_threshold', save_path=None, title='sFRC - correlation curve', show=False):
-        """Plot the measured curve, selected threshold and any genuine extrapolation.
-
-        When an extrapolated crossing was used, distinguish measured samples,
-        the model fit on that measured interval, and the predicted continuation.
-        The numerical curve, cutoff, and fitting parameters are not modified.
-        """
-        resolution = self.get_resolution(threshold)
-        measured = self.smoothed_frc_corrected if self.single_frame else self.smoothed_frc
-        fig, ax = plt.subplots(figsize=(7.5, 4.5))
-        ax.plot(self.frequency, measured, color='#E67373', linewidth=1.7,
-                label='Measured FRC')
-        ax.plot(self.frequency,
-                self.fixed_threshold if threshold == 'fixed_threshold' else self.three_sigma,
-                'k--', linewidth=1, label='1/7 threshold' if threshold == 'fixed_threshold' else threshold)
-
-        if threshold == 'fixed_threshold' and self.extrapolation_used \
-                and self.extrapolated_frc is not None and self.new_frequency is not None:
-            n = len(self.frequency)
-            fit_info = self.extrapolation_fit_info or {}
-            if self.frequency[-1] > 0 and all(key in fit_info for key in ('A', 'k')):
-                x = self.frequency / self.frequency[-1]
-                q = fit_info['A'] * np.exp(-fit_info['k'] * x * x)
-                fitted = q / (1 + q)
-                ax.plot(self.frequency, fitted, color='#4D80B3', linestyle='-.',
-                        linewidth=1.5, label='Fitted model (measured range)')
-            # Include the last measured point so the dashed prediction connects naturally.
-            ax.plot(self.new_frequency[n-1:], self.extrapolated_frc[n-1:],
-                    color='#4D80B3', linestyle='--', linewidth=1.9,
-                    label='Extrapolated prediction (not measured)')
-            ax.axvline(self.frequency[-1], color='gray', linewidth=1,
-                       linestyle=':', label='End of measured range')
-            index = self.get_index(threshold)
-            cutoff_frequency = self.new_frequency
-            cutoff_curve = self.extrapolated_frc
-        else:
-            index = self.get_index(threshold)
-            cutoff_frequency = self.frequency
-            cutoff_curve = measured
-
-        if 0 <= index < len(cutoff_frequency) and np.isfinite(resolution):
-            ax.scatter([cutoff_frequency[index]], [cutoff_curve[index]],
-                       color='#345F92', s=35, zorder=5, label='Resolution cutoff')
-            ax.annotate(f'{resolution:.1f} nm',
-                        (cutoff_frequency[index], cutoff_curve[index]),
-                        xytext=(7, 10), textcoords='offset points')
-
-        ax.set(xlabel='Spatial frequency (1/µm)', ylabel='Correlation', title=title)
-        ax.legend(fontsize=9)
-        fig.tight_layout()
-        if save_path is not None:
-            fig.savefig(save_path, dpi=160, bbox_inches='tight')
-        if show:
-            plt.show()
-        plt.close(fig)
+        """Backward-compatible entry point for the unified plotter."""
+        from src.utils.plotting import ResolutionPlotter
+        return ResolutionPlotter.frc_curve(self, threshold=threshold, save_path=save_path, title=title, show=show)
 
     def to_dict(self):
         """Serialize the basic correlation arrays and extrapolation state.
@@ -426,82 +374,7 @@ class FourierCorrelationData:
 def plot_frc_comparison(single_curve, paired_curve, threshold='fixed_threshold',
                         title='Single-frame and paired-frame FRC',
                         save_path=None, show=False):
-    """Overlay single-frame and independently paired FRC estimates in one figure.
-
-    Both series use their *own* sampled spatial-frequency coordinates. Single-frame
-    samples use the corrected FRC; the independent paired-frame estimate uses the
-    ordinary FRC. The selected threshold is shared when it is 1/7; 3-sigma curves
-    are shown separately if their sampling differs. Model-based continuations are
-    distinctly dashed and drawn only if extrapolation actually supplied a cutoff.
-
-    This method is visualization-only: no numerical curve, crossing, or resolution
-    property is modified. Returns (figure, axes) for optional inspection; when
-    show=True the figure is displayed and closed by pyplot.
-    """
-    if not single_curve.single_frame or paired_curve.single_frame:
-        raise ValueError('Expected one single-frame result and one paired-frame result.')
-    if threshold not in ('fixed_threshold', '3-sigma'):
-        raise ValueError("Use 'fixed_threshold' or '3-sigma'.")
-
-    fig, ax = plt.subplots(figsize=(8.5, 5.0))
-    colors = {'Single-frame': '#E67373', 'Paired-frame': '#3C78A8'}
-    for curve, mode in ((single_curve, 'Single-frame'),
-                        (paired_curve, 'Paired-frame')):
-        color = colors[mode]
-        measured = (curve.smoothed_frc_corrected if curve.single_frame
-                    else curve.smoothed_frc)
-        ax.plot(curve.frequency, measured, color=color, linewidth=1.9,
-                label=f'{mode} measured FRC' + (' (corrected)' if curve.single_frame else ''))
-        cutoff_frequency, cutoff_curve = curve.frequency, measured
-        if (threshold == 'fixed_threshold' and curve.extrapolation_used
-                and curve.new_frequency is not None
-                and curve.extrapolated_frc is not None):
-            n = len(curve.frequency)
-            info = curve.extrapolation_fit_info or {}
-            if (n >= 2 and curve.frequency[-1] > 0
-                    and all(k in info for k in ('A', 'k'))):
-                norm_freq = curve.frequency / curve.frequency[-1]
-                ssnr_fit = info['A'] * np.exp(-info['k'] * norm_freq**2)
-                ax.plot(curve.frequency, ssnr_fit / (1 + ssnr_fit),
-                        color=color, alpha=0.7, linestyle='-.', linewidth=1.3,
-                        label=f'{mode} fitted model (measured range)')
-            ax.plot(curve.new_frequency[n-1:], curve.extrapolated_frc[n-1:],
-                    color=color, linestyle='--', linewidth=2.0,
-                    label=f'{mode} extrapolated prediction (not measured)')
-            if mode == 'Single-frame':
-                ax.axvline(curve.frequency[-1], linestyle=':', color='gray',
-                           linewidth=1.1, label='Single-frame measured frequency limit')
-            cutoff_frequency, cutoff_curve = curve.new_frequency, curve.extrapolated_frc
-        index = curve.get_index(threshold)
-        resolution = curve.get_resolution(threshold)
-        if (0 <= index < len(cutoff_frequency) and np.isfinite(resolution)):
-            ax.scatter([cutoff_frequency[index]], [cutoff_curve[index]],
-                       color=color, s=38, zorder=5,
-                       label=f'{mode} cutoff: {resolution:.1f} nm')
-
-    if threshold == 'fixed_threshold':
-        ax.axhline(1 / 7, color='black', linestyle='--', linewidth=1.1,
-                   label='1/7 threshold')
-    else:
-        threshold_a = single_curve.three_sigma
-        threshold_b = paired_curve.three_sigma
-        equal = (single_curve.frequency.shape == paired_curve.frequency.shape
-                 and np.array_equal(single_curve.frequency, paired_curve.frequency)
-                 and np.allclose(threshold_a, threshold_b, equal_nan=True))
-        ax.plot(single_curve.frequency, threshold_a, color='black',
-                linestyle='--', linewidth=1, label='3-sigma threshold' if equal
-                else 'Single-frame 3-sigma threshold')
-        if not equal:
-            ax.plot(paired_curve.frequency, threshold_b, color='gray',
-                    linestyle=':', linewidth=1.1,
-                    label='Paired-frame 3-sigma threshold')
-
-    ax.set(xlabel='Spatial frequency (1/µm)', ylabel='Correlation', title=title)
-    ax.legend(fontsize=8.5)
-    fig.tight_layout()
-    if save_path is not None:
-        fig.savefig(save_path, dpi=160, bbox_inches='tight')
-    if show:
-        plt.show()
-        plt.close(fig)
-    return fig, ax
+    """Backward-compatible overlay of single-frame and paired-frame FRC."""
+    from src.utils.plotting import ResolutionPlotter
+    return ResolutionPlotter.frc_comparison(single_curve, paired_curve, threshold=threshold,
+                                            title=title, save_path=save_path, show=show)

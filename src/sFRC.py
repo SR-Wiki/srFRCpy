@@ -31,7 +31,7 @@ def _validate_pixel_size(pixel_size):
 
 
 def sFRC(im1,im2=None,pixel_size=None,mean_filter_width=3,single_frame=True,
-         threshold='1/7 hard threshold',plot='auto',stack_axis=0,motion_correction=False,batch_processing=True,current_frame=0):
+         threshold='1/7 hard threshold',plot=True,stack_axis=0,motion_correction=False,batch_processing=True):
     """Estimate Fourier ring correlation resolution from 2D images or image stacks.
     
     Parameters
@@ -55,10 +55,10 @@ def sFRC(im1,im2=None,pixel_size=None,mean_filter_width=3,single_frame=True,
     threshold : str
         '1/7 hard threshold' or '3-sigma'. fixed_threshold and 1/7 are legacy
         aliases of the fixed criterion. {default: '1/7 hard threshold'}
-    plot : bool or str
-        'auto' and True show the first frame/pair in batch mode, or the selected result otherwise. Paired
-        mode shows one calculation for that frame and the next frame. False
-        hides plots without changing the computation batch. {default: 'auto'}
+    plot : bool
+        True previews the first frame/pair in either batch mode. False
+        suppresses automatic plots (useful for manual curve comparisons) without
+        changing computed results. The old 'auto' spelling remains supported. {default: True}
     stack_axis : int
         Axis containing independent 2D frames; 0 means (T,Y,X), and 2 means (Y,X,T).
         {default: 0}
@@ -66,11 +66,8 @@ def sFRC(im1,im2=None,pixel_size=None,mean_filter_width=3,single_frame=True,
         Align paired input images before correlation; ignored for single-frame sampling.
         {default: False}
     batch_processing : bool
-        Process every available frame or adjacent pair; False selects current_frame
-        only. {default: True}
-    current_frame : int
-        Zero-based preview frame; also selects computation when batching is False. A pair
-        needs the following frame. {default: 0}
+        Process every available frame or adjacent pair; False processes only the first
+        frame/pair. {default: True}
     
     Returns
     -------
@@ -89,7 +86,7 @@ def sFRC(im1,im2=None,pixel_size=None,mean_filter_width=3,single_frame=True,
     results; paired mode produces N-1 overlapping pairs: (1,2), (2,3), and so on.
     For MATLAB-style (Y,X,T) input, set stack_axis=2.
     Paired mode uses matching frames from im2, or consecutive overlapping pairs from im1
-    when im2 is omitted. Auto/True plotting shows only current_frame, independently
+    when im2 is omitted. Default plotting shows only the first frame/pair, independently
     of batching; all requested numerical results are retained. Automatic extrapolation is attempted only
     when the selected 1/7 curve has no measured crossing. No files are written here;
     demos perform optional exports to results/.
@@ -99,19 +96,15 @@ def sFRC(im1,im2=None,pixel_size=None,mean_filter_width=3,single_frame=True,
     threshold=normalize_threshold(threshold)
     im1=normalize_image(im1)
     if not single_frame and im2 is not None:im2=normalize_image(im2)
-    # current_frame is used only for individual (non-batch) selection.
-    if batch_processing:
-        current_frame = 0
-    pairs=frame_pairs(im1,im2,single_frame,stack_axis,batch_processing,current_frame)
+    # All frames/pairs are computed in batch; only the first result is previewed.
+    pairs=frame_pairs(im1,im2,single_frame,stack_axis,batch_processing)
     plot=resolve_plot(plot,batch_processing)
-    plot_index=current_result_index(len(pairs),batch_processing,current_frame,single_frame,notify=plot)
+    plot_index=current_result_index(len(pairs))
     parameters=dict(pixel_size_nm=spacing.tolist(),mean_filter_width=mean_filter_width,
                     single_frame=bool(single_frame),threshold=threshold,
                     stack_axis=stack_axis,motion_correction=bool(motion_correction),
                     batch_processing=bool(batch_processing),
                     plot=plot,plot_index=plot_index)
-    if not batch_processing:
-        parameters['current_frame'] = current_frame
     curves=[]
     for result_index,(first,second,label) in enumerate(pairs):
         analysis_spacing=spacing[1]
@@ -126,9 +119,9 @@ def sFRC(im1,im2=None,pixel_size=None,mean_filter_width=3,single_frame=True,
                           single_frame=single_frame,mean_filter_width=mean_filter_width,extrapolation=True)
         curve.calculate_resolution(threshold=threshold)
         extrapolation_notice(curve,threshold,f'sFRC - {label}')
-        curve.summary=dict(frame=label,singleframe=bool(single_frame),threshold=threshold,
-                           extrapolation_triggered=curve.extrapolation_attempted,
-                           resolution_nm=curve.get_resolution(threshold))
+        curve.summary=dict(resolution_nm=curve.get_resolution(threshold),
+                           frame=label,singleframe=bool(single_frame),threshold=threshold,
+                           extrapolation_triggered=curve.extrapolation_attempted)
         curve.parameters=parameters.copy()
         curves.append(curve)
         if plot and result_index==plot_index:

@@ -58,7 +58,7 @@ def _shared_copy(array):
 class RollingFourierRingCorrelation:
     def __init__(self, pixel_size, adaptive_background=True, single_frame=True,
                  block_size=64, monitor_change=False, background_threshold=30,
-                 skip=2, parallel=True, patch_size=64, plot='auto', stack_axis=0, motion_correction=False, batch_processing=True, current_frame=0,
+                 skip=2, parallel=True, patch_size=64, plot=True, stack_axis=0, motion_correction=False, batch_processing=True,
                  threshold='3-sigma'):
         """Configure rolling sFRC resolution-map estimation for images or stacks.
         
@@ -67,7 +67,7 @@ class RollingFourierRingCorrelation:
         pixel_size : float
             Positive calibrated pixel spacing in nm.
         adaptive_background : bool
-            Use 1.2 times the first image Otsu threshold. Forced to False when
+            Use 0.8 times the first image Otsu threshold. Forced to False when
             monitor_change is True. {default: True}
         single_frame : bool
             Generate a diagonal pair from each input image or frame; False uses paired
@@ -75,7 +75,7 @@ class RollingFourierRingCorrelation:
         block_size : int
             Side length of each rolling correlation window in pixels. {default: 64}
         monitor_change : bool
-            Compare Otsu multipliers 0.8, 1.0, and 1.2. Takes priority and forces
+            Compare Otsu multipliers 0.6, 0.8, and 1.0. Takes priority and forces
             adaptive_background=False; the manual threshold is ignored. {default: False}
         background_threshold : float
             Manual background intensity threshold on the normalized 0-255 scale.
@@ -87,10 +87,10 @@ class RollingFourierRingCorrelation:
         patch_size : int
             Side length of a spatial patch assigned to a worker, in pixels.
             {default: 64}
-        plot : bool or str
-            'auto' and True show the first frame/pair in batch mode, or the selected result otherwise.
-            Paired mode shows one calculation for that frame and the next frame.
-            False hides maps without changing the batch. {default: 'auto'}
+        plot : bool
+            True previews only the first frame/pair in batch or non-batch mode.
+            False suppresses automatic plots without changing the calculation.
+            The old 'auto' spelling is still accepted. {default: True}
         stack_axis : int
             Axis containing independent 2D frames; 0 means (T,Y,X), and 2 means (Y,X,T).
             {default: 0}
@@ -98,11 +98,8 @@ class RollingFourierRingCorrelation:
             Align paired input images before correlation; ignored for single-frame
             sampling. {default: False}
         batch_processing : bool
-            Process every available frame or adjacent pair; False selects current_frame
-            only. {default: True}
-        current_frame : int
-            Zero-based selected frame in non-batch mode only; ignored in batches. A pair
-            needs the following frame. {default: 0}
+            Process every available frame or adjacent pair; False processes only the first
+            frame/pair. {default: True}
         threshold : str
             Primary criterion: '1/7 hard threshold' or '3-sigma'. Existing calibrated
             5-sigma then 2-sigma fallbacks remain internal. {default: '3-sigma'}
@@ -116,9 +113,9 @@ class RollingFourierRingCorrelation:
         -----
         pixel_size always refers to the original acquisition spacing. block_size is
         rounded up to an even integer; skip is capped at half the block size. Batch
-        processing is enabled by default; only the first frame/pair is previewed in batch mode. Automatic background uses
-        1.2 times Otsu. monitor_change=True disables adaptive_background and
-        independently compares 0.8, 1.0, and 1.2 times Otsu. Manual background is
+        processing is enabled by default; only the first frame/pair is previewed in either mode. Automatic background uses
+        0.8 times Otsu. monitor_change=True disables adaptive_background and
+        independently compares 0.6, 0.8, and 1.0 times Otsu. Manual background is
         used only when both switches are False, on a 0-255 intensity scale. The maintained
         API keeps numerical results in memory and leaves exports to demos.
         """
@@ -126,8 +123,10 @@ class RollingFourierRingCorrelation:
         self.pixel_size = float(pixel_size)
         self.threshold = normalize_threshold(threshold)
         self._analysis_pixel_size = self.pixel_size
-        self.plot=resolve_plot(plot,batch_processing)
-        self.batch_processing,self.current_frame=batch_processing,(0 if batch_processing else current_frame)
+        # Monitoring three backgrounds always uses the first frame/pair.
+        effective_batch = bool(batch_processing) and not bool(monitor_change)
+        self.plot=resolve_plot(plot,effective_batch)
+        self.batch_processing=effective_batch
         self.stack_axis,self.motion_correction=stack_axis,motion_correction
         if self.pixel_size<=0 or not np.isfinite(self.pixel_size):raise ValueError('Enter a positive, finite pixel_size in nm.')
         if block_size<2 or skip<1 or patch_size<1:raise ValueError('Choose block_size >= 2, skip >= 1, and patch_size >= 1.')
@@ -136,7 +135,7 @@ class RollingFourierRingCorrelation:
         self.monitor_change = bool(monitor_change)
         self.adaptive_background = bool(adaptive_background) and not self.monitor_change
         if self.monitor_change:
-            print('srFRC - background monitoring enabled. The absolute background threshold for each result is reported after computation; the manual threshold is ignored.')
+            print('srFRC - background monitoring enabled: batch processing is OFF; only the first frame/pair is analysed. Absolute thresholds are reported; manual threshold is ignored.')
         self.skip = skip
         self.single_frame = single_frame
         self.drift_correct = not self.single_frame
@@ -165,10 +164,8 @@ class RollingFourierRingCorrelation:
             monitor_change=self.monitor_change,background_threshold=background_threshold,
             skip=skip,parallel=bool(parallel),patch_size=patch_size,stack_axis=stack_axis,
             motion_correction=bool(motion_correction),
-            batch_processing=bool(batch_processing),
+            batch_processing=self.batch_processing,
             plot=self.plot,minimum_resolution_nm=2.3*self.pixel_size)
-        if not batch_processing:
-            self.parameters['current_frame'] = current_frame
 
     def get_rfrc_map(self,background=None):
         """Return the latest completed resolution map.
@@ -326,9 +323,8 @@ class RollingFourierRingCorrelation:
         self.frame_elapsed_seconds_by_background = {}
         image1=normalize_image(image1)
         if not self.single_frame and image2 is not None:image2=normalize_image(image2)
-        pairs=frame_pairs(image1,image2,self.single_frame,self.stack_axis,self.batch_processing,self.current_frame)
-        plot_index=current_result_index(len(pairs),self.batch_processing,self.current_frame,
-                                        self.single_frame,notify=self.plot)
+        pairs=frame_pairs(image1,image2,self.single_frame,self.stack_axis,self.batch_processing)
+        plot_index=current_result_index(len(pairs))
         self.parameters['plot_index']=plot_index
         self._analysis_pixel_size=self.pixel_size*(2 if self.single_frame else 1)
         self.metrics=[];self.rfrc_maps={};self.final_background_thresholds={}
@@ -358,8 +354,8 @@ class RollingFourierRingCorrelation:
                 self.statistics_map_shape=data.shape
                 data=restore_map_size(data,target)
                 maps.append(data);thresholds.append(float(background))
-                row=dict(frame=label,background_setting=ratio_label,singleframe=bool(self.single_frame),threshold=self.threshold,
-                         **statistics,background_threshold=float(background))
+                row=dict(**statistics,background_threshold=float(background),frame=label,
+                         background_setting=ratio_label,singleframe=bool(self.single_frame),threshold=self.threshold)
                 frame_elapsed_seconds.append(time.perf_counter()-frame_started)
                 self.metrics.append(row)
             stack=np.stack(maps)
@@ -449,7 +445,7 @@ class RollingFourierRingCorrelation:
         Returns
         -------
         list of float
-            [1.2] for default adaptive background, [0.8,1.0,1.2] for monitoring, or
+            [0.8] for default adaptive background, [0.6,0.8,1.0] for monitoring, or
             [0.0] for manual background.
         """
         if self.monitor_change:return [0.6,0.8,1.0]

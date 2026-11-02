@@ -72,7 +72,7 @@ def dri_interpretation(error):
     return 'use with caution'
 
 def frame_pairs(image1, image2=None, single_frame=True, stack_axis=0,
-                batch_processing=True, current_frame=0):
+                batch_processing=True):
     """Select 2D frames or paired frames from image arrays.
     
     Parameters
@@ -88,11 +88,8 @@ def frame_pairs(image1, image2=None, single_frame=True, stack_axis=0,
         Axis containing independent 2D frames; 0 means (T,Y,X), and 2 means (Y,X,T).
         {default: 0}
     batch_processing : bool
-        Process every available frame or adjacent pair; False selects current_frame
+        Process every available frame or adjacent pair; False selects the first
         only. {default: True}
-    current_frame : int
-        Zero-based frame index when batch_processing is False. An adjacent pair also
-        needs the following frame. {default: 0}
     
     Returns
     -------
@@ -105,8 +102,7 @@ def frame_pairs(image1, image2=None, single_frame=True, stack_axis=0,
     One N-frame stack produces N single-frame entries or N-1 adjacent-pair
     entries when batching is enabled. Use stack_axis=2 for MATLAB-style (Y,X,T).
     Paired input uses matching frames when image2 is supplied; otherwise adjacent
-    overlapping pairs are formed. Single-frame mode ignores image2. Selection indices
-    are zero-based.
+    overlapping pairs are formed. Single-frame mode ignores image2. Non-batch mode always uses the first available index.
     """
     first = np.asarray(image1)
     if first.ndim == 2: first = first[None]
@@ -116,23 +112,8 @@ def frame_pairs(image1, image2=None, single_frame=True, stack_axis=0,
     if not isinstance(batch_processing,(bool,np.bool_)):
         raise ValueError('batch_processing must be True or False.')
     def indices(count):
-        """Select all available indices or the requested current frame.
-        
-        Parameters
-        ----------
-        count : int
-            Number of available frames or pairs.
-        
-        Returns
-        -------
-        range or list of int
-            Indices selected by the enclosing frame_pairs batch settings.
-        """
-        if batch_processing:return range(count)
-        if (not isinstance(current_frame,(int,np.integer)) or isinstance(current_frame,(bool,np.bool_))
-                or not 0 <= current_frame < count):
-            raise ValueError('Choose a valid zero-based current_frame. In adjacent-pair mode, the selected frame must have a following frame.')
-        return [int(current_frame)]
+        """Return all valid indices or just the first, depending on batch mode."""
+        return range(count) if batch_processing else [0]
     if single_frame:
         return [(first[i],None,f'frame{i+1:04d}') for i in indices(len(first))]
     if image2 is not None:
@@ -174,11 +155,11 @@ def resolve_plot(requested, batch_processing):
     Parameters
     ----------
     requested : bool or str
-        'auto' displays the current-frame result, with or without batching.
+        True previews the first frame/pair with or without batching.
+        The legacy 'auto' alias is accepted for older callers.
         True/'true' requests plots; False/'false' hides them.
     batch_processing : bool
-        Process every available frame or adjacent pair; False selects current_frame
-        only.
+        Process every available frame or adjacent pair; False processes only the first frame/pair.
     
     Returns
     -------
@@ -189,39 +170,22 @@ def resolve_plot(requested, batch_processing):
     if isinstance(requested, str):
         value = requested.strip().lower()
         if value not in ('auto', 'true', 'false'):
-            raise ValueError("Choose plot='auto', True, or False.")
+            raise ValueError("Choose plot=True or False; legacy 'auto' is also accepted.")
         requested = value != 'false'
     elif not isinstance(requested, (bool, np.bool_)):
-        raise ValueError("Choose plot='auto', True, or False.")
+        raise ValueError("Choose plot=True or False; legacy 'auto' is also accepted.")
     return bool(requested)
 
 
-def current_result_index(count, batch_processing, current_frame, single_frame=True, notify=True):
-    """Locate the sole plot preview without changing the computation batch.
+def current_result_index(count):
+    """Return index zero for the first computed frame/pair, or None if empty.
 
-    Parameters
-    ----------
-    count : int
-        Number of computed frame or pair results.
-    batch_processing : bool
-        True for a complete batch; False for one already selected result.
-    current_frame : int
-        Retained for compatibility. Ignored in batch preview selection.
-    single_frame : bool
-        Select one frame rather than an adjacent pair. {default: True}
-    notify : bool
-        Print a console notice if no matching current-frame result is available.
-        {default: True}
-
-    Returns
-    -------
-    int or None
-        Index of the sole displayed result, or None when no result exists.
-        Batch mode previews its first computed frame/pair.
+    Batch size and frame metadata never control preview selection. This keeps
+    the first-result behavior identical in batch and non-batch modes.
     """
-    # Python has no active Fiji-style stack cursor. The first computed
-    # frame/pair is the batch preview; an individual run previews its sole result.
-    return 0 if count > 0 else None
+    if count <= 0:
+        return None
+    return 0
 
 def finalize_resolution_map(map_data, original_pixel_size_nm=None):
     """Apply background cleanup and the acquisition-based map lower bound.

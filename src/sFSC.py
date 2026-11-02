@@ -15,7 +15,6 @@ from src.utils.directional_resolution_inference import DirectionalResolutionInfe
 from src.utils.analysis_results import (DRI_GUIDANCE,dri_interpretation,with_sfsc_dri_guidance,
                                     normalize_threshold)
 from src.utils.sfsc_guidance import validate_num_cones, ANGLE_GUIDANCE, resolve_z_sampling, angle_range_notice, z_sampling_note
-import matplotlib.pyplot as plt
 
 
 def _validate_settings(pixel_size, xy_mode, mean_filter_width,
@@ -28,6 +27,7 @@ def _validate_settings(pixel_size, xy_mode, mean_filter_width,
         Required positive voxel spacings [z,y,x] in nm. None is a placeholder and must
         be replaced with the acquisition calibration.
     xy_mode : str
+        'slice' is the default; consider '3D' for low-SNR data.
         Lateral estimate from selected Z slices (slice) or the central plane of the 3D
         FFT (3D).
     mean_filter_width : int
@@ -281,9 +281,9 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
             low_angle=low_angle,high_angle=high_angle,num_cones=num_cones,threshold=threshold)
         erf.xy_resolution,erf.xy_cutoff,erf.z_resolution,erf.z_cutoff=np.nan,np.nan,np.nan,np.nan
         erf.angles,erf.cutoffs=np.empty(0),np.empty(0)
-        erf.summary=dict(singleframe=bool(single_frame),threshold=threshold,
-            extrapolation_triggered=bool(lateral_triggered),extrapolation_stage='lateral' if lateral_triggered else 'none',
-            lateral_resolution_nm=np.nan,axial_resolution_nm=np.nan,E_DRI_percent=np.nan)
+        erf.summary=dict(lateral_resolution_nm=np.nan,axial_resolution_nm=np.nan,E_DRI_percent=np.nan,
+            singleframe=bool(single_frame),threshold=threshold,
+            extrapolation_triggered=bool(lateral_triggered),extrapolation_stage='lateral' if lateral_triggered else 'none')
         erf.parameters=parameters
         erf.z_sampling_enabled=bool(z_sampling)
         erf.lateral_curve=selected_frc
@@ -352,9 +352,9 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
     erf.interpretation_note=z_sampling_note(single_frame,z_sampling,z_resolution)
     if erf.interpretation_note: print('sFSC - axial: '+erf.interpretation_note)
     stage=('lateral and axial' if erf.extrapolation_attempted else 'lateral') if lateral_triggered else ('axial' if erf.extrapolation_attempted else 'none')
-    row=dict(singleframe=bool(single_frame),threshold=threshold,
-             extrapolation_triggered=bool(lateral_triggered or erf.extrapolation_attempted),extrapolation_stage=stage,
-             lateral_resolution_nm=xy_resolution,axial_resolution_nm=z_resolution,E_DRI_percent=100*erf.goodness_of_fit)
+    row=dict(lateral_resolution_nm=xy_resolution,axial_resolution_nm=z_resolution,E_DRI_percent=100*erf.goodness_of_fit,
+             singleframe=bool(single_frame),threshold=threshold,
+             extrapolation_triggered=bool(lateral_triggered or erf.extrapolation_attempted),extrapolation_stage=stage)
     erf.summary=row
     erf.parameters=parameters
     erf.lateral_curve=selected_frc
@@ -369,11 +369,6 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
     if np.isfinite(z_resolution):
         polar_plot(erf,show=True)
     if plot_fitting_curve and np.isfinite(z_resolution):
-        fig,ax=plt.subplots()
-        xx=np.linspace(0,erf.xy_cutoff,200)
-        ax.plot(xx,erf.z_cutoff*np.sqrt(np.maximum(0,1-(xx/erf.xy_cutoff)**2)),color='#E67373')
-        ax.scatter(erf.cutoffs*np.cos(erf.angles),erf.cutoffs*np.sin(erf.angles),s=15)
-        ax.set(xlabel='Spatial frequency XY (1/um)',ylabel='Spatial frequency Z (1/um)',title='sFSC - DRI elliptical fit')
-        plt.show()
-        plt.close(fig)
+        from src.utils.plotting import ResolutionPlotter
+        ResolutionPlotter.dri_fit(erf, show=True)
     return erf

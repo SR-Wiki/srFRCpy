@@ -69,15 +69,15 @@ pip install -r requirements.txt
 ```
 
 The three core implementations are colocated in `src/`. The `demos/` folder
-contains exactly three runnable examples: `sFRC_demo.py`, `sFSC_demo.py` and
-`srFRC_demo.py`. All plotting, saving and other helper functions live in `utils/`.
+contains exactly three runnable examples: `sFRC_demo.ipynb`, `sFSC_demo.ipynb` and
+`srFRC_demo.ipynb`. 
 
 ## Demo scripts
 
 Download and extract the **example_data.zip** asset from
 [srFRCj Releases](https://github.com/SR-Wiki/srFRCj/releases/download/v1.0/example_data.zip) into the project-root
-`example_data/`, alongside `src/`, `utils/` and `demos/`. Edit the explicit path and calibrated pixel size in each
-demo if your files differ. No extra data-loader function is required.
+`example_data/`, alongside `src/` and `demos/`. Edit the explicit path and calibrated pixel size in each
+demo if your files differ. 
 
 
 ```bash

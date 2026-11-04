@@ -38,20 +38,6 @@ FRC/FSC **correlation thresholds** (`1/7 hard threshold` and `3-sigma`).
 Numerical map values are in nm; colour rendering is for inspection and should
 not replace quantitative TIFF/MAT/NPZ data.
 
-## Correlation thresholds and automatic preview
-
-All three entry points accept exactly two correlation criteria:
-`threshold='1/7 hard threshold'` and `threshold='3-sigma'`. sFRC/sFSC default
-to the first; srFRC defaults to the second. For existing scripts, `fixed_threshold`
-and `1/7` remain aliases of the same fixed criterion. Curve objects and compact
-summary/parameter dictionaries retain the internal key `fixed_threshold`; these
-aliases are not additional threshold types. 2-sigma/5-sigma are not public choices.
-
-For sFRC/srFRC, `plot=True` (default) previews **only the first frame or
-adjacent pair**; `plot=False` disables automatic plots but never changes the
-numerical calculations. No `current_frame` parameter exists. The historical
-string spelling `plot='auto'` is still accepted by the implementation for older
-scripts, but is not needed in new code.
 
 | batch_processing | Computation | Display |
 | --- | --- | --- |
@@ -68,33 +54,7 @@ The save utilities write numerical data and summary rows for **all computed
 frames**; optional PNG previews follow the one-result rule. Monitoring retains
 the background comparisons for this same frame/pair. In non-batch paired mode, the first two input frames form the adjacent pair. Batch mode previews the first available pair.
 
-## Input precision, normalization and plot appearance
 
-The demos convert TIFF data directly to **float32** and divide the complete
-loaded image, stack or volume by its maximum. The public numerical entry points
-apply the same preparation to directly supplied arrays, before any diagonal
-averaging or motion correction. Input arrays are copied, so caller data are not
-modified. All-zero inputs stay zero; non-finite intensities are rejected with
-an explanatory error. There is no intermediate 8-bit/16-bit conversion.
-
-The reading/preparation stage is 32-bit floating point; subsequent FFT, fitting
-or interpolation routines may retain their existing higher calculation precision.
-
-One maximum is shared by a complete stack or 3D volume, preserving relative
-slice intensities. Separately supplied paired acquisitions are normalized
-independently. srFRC also normalizes each generated pair member to a maximum of
-one; rolling blocks retain their existing local normalization. Manual and
-reported background thresholds retain their **0-255 units**: background tests
-convert normalized intensity to that scale, and the automatic Otsu threshold is
-reported on that scale. This is an intensity convention, not an 8-bit image cast.
-
-Figures show curves, axes, legends and numerical results. E_DRI grades, fitting
-angle advice, extrapolation notices and Z-sampling reminders appear in the
-console rather than being embedded in result plots or PNG previews. Existing
-text/JSON guidance exports remain available. Correlation curves, the fitted 3D
-anisotropic resolution profile and DRI-fit lines use light red **#E67373**
-(RGB 230,115,115); simultaneous directional curves use distinguishable red
-shades/line styles. Thresholds and measured-point markers retain contrast.
 
 ## sFRC
 
@@ -197,27 +157,11 @@ Resolution uses a crossing between the measured correlation curve and its
 threshold. Extrapolation fits a curve beyond the measured frequency range
 when no usable crossing is available; it does not add measured information.
 
-1. Lateral sFSC use measured crossings when available. Otherwise,
-   automatic extrapolation is attempted for `threshold='fixed_threshold'`.
-2. Axial sFSC/DRI first evaluates every directional curve without extrapolation.
-   If any direction has a usable measured crossing, only usable measured
-   directions enter the fit. Missing directions are excluded.
-3. Directional extrapolation is attempted only when **all directions lack
-   usable measured crossings**, and only for the fixed 1/7 threshold.
-4. Failed extrapolation, an unsupported threshold, or an unusable fit leaves
-   unavailable estimates as `NaN` and issues an explanatory warning. An
-   unavailable lateral anchor also prevents an axial estimate.
-
 Successful extrapolation prints a stage-specific notice. Failures and
 unsupported thresholds use `RuntimeWarning`; the selected threshold is never
 silently changed. Internal measured-only controls support the first DRI pass
 and rolling FRC and are not public switches.
 
-The sFSC summary records `extrapolation_triggered` as an attempt flag, including
-failed attempts. It also records `extrapolation_stage`: `none`, `lateral`,
-`axial`, or `lateral and axial`. Lateral tracking includes candidate slices;
-the flag alone does not prove that the final selected curve was extrapolated.
-Inspect the notices and returned curve/fit information.
 
 ### E_DRI: what the value means
 
@@ -255,11 +199,6 @@ produce advice, not automatic setting changes. `num_cones` must be a positive
 integer; values below 5 remain accepted. Choose angles from directional curve
 quality and sampling, rather than minimizing E_DRI alone.
 
-`result.goodness_of_fit` is a fraction: `0.10` means 10%.
-`result.summary['E_DRI_percent']` is already in percent. Estimates above 20%
-remain available for inspection/export together with their warning; export
-does not make them acceptable.
-
 ### Z sampling: manual control and axial interpretation
 
 `z_sampling` is **False by default** and must be enabled manually. Voxel
@@ -271,7 +210,7 @@ working volumes and doubles the effective Z spacing. This can reduce shared
 axial correlations associated with adjacent planes and inter-plane
 inconsistencies. It also reduces sampling density and may change directional
 crossings and the inferred result. It is separate from spacing-matching
-preprocessing and from srFRC cubic-spline map restoration.
+preprocessing.
 
 If axial resolution seems implausibly small for the acquisition, enable
 `z_sampling`, rerun, and compare the axial estimate, directional crossings
@@ -318,15 +257,6 @@ failed fits, early returns, and parameter/runtime errors. It is independent of
 plotting and of whether E_DRI is high. An unavailable value receives no grade.
 The guide stays in textual output rather than adding repetitive CSV columns.
 
-### sFSC numerical timing
-
-Each call returns `computation_time_seconds` (total numerical time, excluding
-its final Matplotlib profile/DRI-fit displays), and `stage_elapsed_seconds`
-with **only** `lateral` and `axial` (seconds). `lateral` includes input
-normalization/pair preparation and lateral FRC; `axial` includes Z sampling,
-resampling, FFT and directional FSC/DRI. Progress display overhead within the
-calculation is included. If lateral resolution is unavailable, `axial` is zero.
-The two stage values cover a single call, not the notebook-level two-run comparison.
 
 ### sFSC results, plotting and saved files
 
@@ -374,51 +304,19 @@ second image/stack remains an optional paired-input form.
 | `motion_correction` | `False` | Align paired frames before correlation |
 | `block_size` | `64` | Local window width; rounded up to an even integer |
 | `skip` | `2` | Rolling step, capped at half the window width |
-| `adaptive_background` | `True` | Use **0.8 × Otsu**; ignored when monitoring |
-| `monitor_change` | `False` | Compare **0.6, 0.8 and 1.0 × Otsu** on the first frame/pair; force non-batch mode |
+| `adaptive_background` | `True` | Automatic Otsu-based background detection |
+| `monitor_change` | `False` | Compare different Otsu coefficients for the first frame/pair; disable batch mode |
 | `background_threshold` | `30` | Manual 0–255 intensity threshold, used only when both background switches are False |
 | `parallel` | `True` | Enable parallel rolling computation |
 | `patch_size` | `64` | Parallel patch width |
 
 The public choices select the **primary** criterion: `'1/7 hard threshold'`
-or `'3-sigma'`; srFRC still defaults to `'3-sigma'`. Both serial and parallel
-paths retain the existing fallback order: **primary, then 5-sigma x 0.6, then
-2-sigma x 1.5**. A fallback is used only when earlier criteria have no finite
-positive estimate. Zero is used only if all criteria fail. Summary threshold
-fields identify the selected primary criterion. Padding calibration is retained
-for sigma thresholds; the hard cutoff stays exactly 1/7. Internal fallback
-criteria are not extra public choices. Local curves are not extrapolated.
-Correlation threshold is independent of the background-intensity controls.
+or `'3-sigma'`; srFRC still defaults to `'3-sigma'`. 
 
-### srFRC background parameter relationships
+### srFRC background settings
 
-`monitor_change=True` has the highest priority: it sets
-`adaptive_background=False` **and** `batch_processing=False`, so only the first
-frame/pair is analyzed against three automatic background thresholds.
+`monitor_change=True` compares background thresholds using different Otsu coefficients on the first frame/pair and disables batch processing. Otherwise, use automatic background detection or specify a manual `background_threshold` (0–255).
 
-| `monitor_change` | Effective `adaptive_background` | Effective `batch_processing` | Background cutoff(s), on 0–255 intensity scale |
-| --- | --- | --- | --- |
-| `True` | `False` | `False` | `0.6 × Otsu`, `0.8 × Otsu`, `1.0 × Otsu` |
-| `False` | `True` | User setting | `0.8 × Otsu` |
-| `False` | `False` | User setting | Manual `background_threshold` (default `30`) |
-
-The internal group names (`bg0.6`, `bg0.8`, `bg1.0`) refer to Otsu multipliers,
-**not** actual thresholds. The absolute computed cutoff for each frame/pair is
-reported as `background_threshold` in the results (0–255 units). Otsu is
-evaluated for each working pair; FRC correlation thresholds are independent of
-these background-intensity cutoffs.
-
-For regular automatic mapping, use the defaults. For manual masking, use
-`monitor_change=False, adaptive_background=False` and specify
-`background_threshold`.
-
-### srFRC numerical timing
-
-Existing timing is unchanged: `computation_time_seconds` (alias
-`elapsed_seconds`), `background_elapsed_seconds`, and
-`frame_elapsed_seconds_by_background` are measured before any optional map
-plotting or export. Background and frame timings are nested in the total and
-must not be added to it.
 
 ### srFRC stack batching and plotting
 
@@ -436,66 +334,9 @@ regardless of batch mode; batch output still contains all computed results. Pair
 `plot=False` hides previews; numerical batches and exported data remain complete.
 The demos keep numerical output separate from user-generated comparison plots and optional file exports.
 
-### srFRC monitored outputs and sJet comparison
 
-In monitoring mode, all three background groups are retained separately. To
-access the computed maps or statistics, select a group if an array is required:
 
-```python
-maps = analysis.get_rfrc_map()           # dict: bg0.6, bg0.8, bg1.0
-stats = analysis.calculate_global()      # native-grid statistics by group
-map_08 = analysis.get_rfrc_map('bg0.8')   # one numeric map in nm
-```
 
-The first frame/pair is previewed, with three maps shown side by side using
-sJet. Each group's **absolute** background threshold is reported in results;
-`bg0.8` is only an internal/export group ID. A single-background run returns
-its original NumPy array. Monitoring may return dictionaries from the
-convenience accessors; `rfrc_map` and other legacy scalar attributes refer to
-the last result/group and should not be used to enumerate monitored groups.
-
-The export helper can write separate TIFF/CSV files for `bg0.6`, `bg0.8`, and
-`bg1.0`, alongside combined CSV/JSON/NPZ results. In a normal automatic run,
-the numeric map uses the `bg0.8` group label. All output maps retain original
-XY dimensions; their numerical values are not encoded as PNG colours.
-
-### srFRC map restoration
-
-Single-frame srFRC restores the reduced map to the original XY size with a
-**separable cubic spline**, using `scipy.interpolate.CubicSpline` along X and
-then Y, with not-a-knot boundary conditions. Fourier map restoration and the
-`map_interpolation` selection parameter have been removed. Backend metadata
-records `cubic_spline`; paired maps are already full size and record `none`.
-
-Zero-based output index j samples source coordinate j/2. Coordinates beyond the
-last source sample use that edge value, including odd original dimensions.
-Singleton axes are constant; axes with two or three samples use the corresponding
-linear or quadratic interpolation. Existing source samples are retained at even
-output coordinates. This is an interpolating cubic spline, not bicubic convolution.
-
-The original finite positive foreground mask is repeated to the output grid;
-it is never inferred from interpolated values. Points outside this support remain
-zero. Non-positive candidates become zero; finite positive candidates are bounded
-by the positive source minimum and maximum after source-map cleanup below.
-These guards prevent interpolation artifacts from becoming extra foreground.
-New spline samples can change the foreground mean; exact distribution or mean
-preservation is not guaranteed or imposed.
-
-**All resolution statistics are calculated BEFORE upsampling.** The native
-rolling map is first cleaned: non-positive samples become background zero and
-finite positive samples are at least **2.3 times the original pixel size in nm**.
-Mean/min/max resolution and `rFRC_value=mean/min-1` are then calculated from its
-finite positive foreground. Background zeros are excluded; an empty foreground
-gives `NaN` statistics. Only afterwards is the map enlarged for display/export.
-The spline is bounded by the cleaned source range, so restored positive values
-also retain the required lower bound. The doubled diagonal-pair spacing is used
-for correlation frequencies, not for a second map floor.
-
-`statistics_stage` records `pre_upsampling`, and `statistics_map_shape` records
-the native grid dimensions. `calculate_global()` returns the cached native-grid
-statistics; it never recalculates them from `rfrc_map`. CSV/JSON summaries use
-these same cached values. TIFF/NPZ/PNG continue to contain original-size maps;
-their spatial mean can differ from the reported native-grid mean.
 
 ### srFRC results and saved files
 
@@ -507,15 +348,10 @@ background_threshold.
 | --- | --- |
 | Summary / metadata | `srFRC_results.csv`, `srFRC_results.json` |
 | Final map arrays | `srFRC_results.npz` |
-| Final numeric maps | `srFRC_bg0.8_resolution-map.tif`, `srFRC_manual-bg_resolution-map.tif` |
-| Optional per-frame preview | `srFRC_frame0001_bg0.8_resolution-map.png` |
+| Final numeric maps | Separate Float32 TIFF files for each background setting |
+| Optional per-frame preview | First-frame resolution-map PNG |
 
-Frame identifiers use `frame0001`; pairs use `pair0001-0002`. Each background
-setting has a `(T,Y,X)` map array and a float32 TIFF with nm units, without
-normalization or colour-LUT conversion. The `bg0.8` label is an Otsu multiplier;
-the actual intensity threshold is stored in `background_threshold` and
-`final_background_thresholds`. Manual background uses `manual-bg`.
-TIFF, NPZ and summaries use the same final restored maps.
+Each background setting has separate numeric maps and summaries. TIFF maps retain nm values; actual background thresholds are recorded in the results.
 
 ## Demo outputs
 
@@ -544,8 +380,7 @@ from src.utils.save_results import save_sfrc_results
 | --- | --- |
 | `sFRC_results.csv` | Global 2D resolution (nm) by frame/pair |
 | `sFSC_results.csv` | Lateral/axial resolution (nm) and E_DRI (%) |
-| `srFRC_bg0.8_resolution-map.tif` | Float32 numeric resolution map for the default automatic background |
-| `srFRC_bg0.6_resolution-map.tif` | One group from a monitored run |
+| srFRC numeric TIFFs | Float32 resolution maps for the selected background settings |
 
 Saved TIFFs retain numeric nm values; `0` indicates background/invalid local
 estimation rather than 0 nm resolution. Existing named files may be overwritten

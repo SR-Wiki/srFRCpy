@@ -86,7 +86,7 @@ Resolution normally uses a measured crossing of the correlation curve and
 the selected threshold. When no usable crossing is available, automatic
 curve extrapolation is attempted for `threshold='fixed_threshold'`.
 The fitted crossing lies beyond the measured frequency range and adds no
-measured information. Extrapolation is not available for `3-sigma`.
+measured information. 
 
 Curve extrapolation is automatic, not a public parameter.
 A successful attempt prints a console notice; failed or unsupported

@@ -3,23 +3,42 @@
 Return to the [README](../README.md).
 
 This guide applies to this Python repository. The entry points are `sFRC`,
-`sFSC`, and `RollingFourierRingCorrelation` in `src/`. They accept image
-arrays and return results in memory, with optional display controls. Demos
-read the example TIFFs and invoke plotting/export utilities from `utils/`.
-The core analysis functions never save files or take output-path arguments.
+`sFSC`, and `RollingFourierRingCorrelation` in `src/`. They accept image arrays and return results in memory. The three demos are
+**Jupyter notebooks** (`demos/sFRC_demo.ipynb`, `sFSC_demo.ipynb`, and
+`srFRC_demo.ipynb`); plotting/export helpers live in `src/utils/`.
+The numerical functions do not write files. Open the notebooks in JupyterLab
+or VS Code; do not run `.ipynb` files with `python filename.ipynb`.
 
 Go directly to the analysis you are using:
 
 - [sFRC — global 2D resolution](#sfrc)
 - [sFSC — lateral/axial 3D resolution and DRI](#sfsc)
 - [srFRC — local resolution maps](#srfrc)
+- [Output files and demo utilities](#demo-outputs)
 
 Use the original acquisition calibration. Input sampling, reported resolutions, and srFRC map values are all in **nm**.
 
-`pixel_size` must be supplied with the acquisition calibration. sFRC and
-sFSC use `None` as a placeholder, not a usable spacing default.
+Provide the actual acquisition spacing through `pixel_size`; it is not inferred
+from the TIFF viewer's image properties. sFRC/sFSC use `None` as a placeholder,
+**not** a usable spacing default. For a 2D stack use `(T,Y,X)` by default; for
+sFSC use `(Z,Y,X)` with voxel spacing `[z,y,x]`. All Python spacings and
+reported resolutions are in **nm**.
 
-## Threshold choices and auto plotting
+## How to interpret the results
+
+| Output | Interpretation |
+| --- | --- |
+| Resolution (nm) | **Smaller** values indicate finer estimated resolvable detail; compare results obtained with appropriate sampling and the same analysis settings. |
+| `NaN` / unavailable | No usable resolution estimate was obtained; check warnings, pixel/voxel spacing and the correlation curves instead of treating it as zero. |
+| srFRC map value `0` | Background or an invalid local estimate, **not** a measured resolution of 0 nm. Zero pixels are excluded from foreground resolution statistics. |
+| `E_DRI` (sFSC) | Agreement between directional cutoffs and the fitted DRI model. **Not** an error relative to ground truth or a confidence interval. |
+
+For srFRC, background **intensity thresholds** (0–255 scale) are separate from
+FRC/FSC **correlation thresholds** (`1/7 hard threshold` and `3-sigma`).
+Numerical map values are in nm; colour rendering is for inspection and should
+not replace quantitative TIFF/MAT/NPZ data.
+
+## Correlation thresholds and automatic preview
 
 All three entry points accept exactly two correlation criteria:
 `threshold='1/7 hard threshold'` and `threshold='3-sigma'`. sFRC/sFSC default
@@ -28,27 +47,26 @@ and `1/7` remain aliases of the same fixed criterion. Curve objects and compact
 summary/parameter dictionaries retain the internal key `fixed_threshold`; these
 aliases are not additional threshold types. 2-sigma/5-sigma are not public choices.
 
-For sFRC/srFRC, `plot='auto'` and `plot=True` display only the result selected
-by the zero-based `current_frame`, independently of batch processing:
+For sFRC/srFRC, `plot=True` (default) previews **only the first frame or
+adjacent pair**; `plot=False` disables automatic plots but never changes the
+numerical calculations. No `current_frame` parameter exists. The historical
+string spelling `plot='auto'` is still accepted by the implementation for older
+scripts, but is not needed in new code.
 
 | batch_processing | Computation | Display |
 | --- | --- | --- |
-| `True` (default) | All frames or adjacent pairs | Only current_frame or its adjacent pair |
-| `False` | Only current_frame or its adjacent pair | That same one result |
+| `True` (default) | All frames or adjacent pairs | First frame/pair |
+| `False` | Only the first frame or its adjacent pair | The first frame/pair |
 
-Single-frame mode displays the current frame. Paired mode displays one result
-for current_frame and the next frame. `plot=False` hides figures. Text
-'true'/'false' is also accepted. With separate paired arrays, current_frame
-selects corresponding frames from both arrays. sFSC treats its input as a 3D
+In non-batch mode, single-frame analysis displays the first frame; paired mode displays the first two frames. `plot=False` hides figures. Text
+'true'/'false' is also accepted. With separately supplied paired arrays, non-batch mode uses the first frame from each array. sFSC treats its input as a 3D
 volume and always displays an available resolution result. sFSC has no public
 `plot` argument or demo `plot_results` switch; `plot_fitting_curve` controls
 only the extra DRI-fit figure.
 
 The save utilities write numerical data and summary rows for **all computed
-frames**; optional PNG previews follow the current-frame rule. Monitoring retains
-the background comparisons for this same frame/pair. If the current frame has
-no following frame in paired mode, no other pair is substituted: a console
-notice explains the unavailable preview and the full computed batch is retained.
+frames**; optional PNG previews follow the one-result rule. Monitoring retains
+the background comparisons for this same frame/pair. In non-batch paired mode, the first two input frames form the adjacent pair. Batch mode previews the first available pair.
 
 ## Input precision, normalization and plot appearance
 
@@ -98,9 +116,8 @@ second image/stack remains an optional paired-input form.
 | `threshold` | `'1/7 hard threshold'` | Only alternative: `'3-sigma'` |
 | `mean_filter_width` | `3` | Correlation smoothing radius in frequency bins |
 | `batch_processing` | `True` | Process every frame or adjacent pair |
-| `current_frame` | `0` | Zero-based preview frame; also selects computation when batching is False |
 | `stack_axis` | `0` | Frame axis: 0 for `(T,Y,X)`, 2 for `(Y,X,T)` |
-| `plot` | `'auto'` | Display only current_frame, independently of batching; False hides plots |
+| `plot` | `True` | Preview only the first frame/pair in either batch mode; False suppresses automatic plots |
 | `motion_correction` | `False` | Align paired frames before correlation |
 
 ### sFRC curve extrapolation
@@ -111,7 +128,7 @@ curve extrapolation is attempted for `threshold='fixed_threshold'`.
 The fitted crossing lies beyond the measured frequency range and adds no
 measured information. Extrapolation is not available for `3-sigma`.
 
-`curve_extrapolation` is an automatic procedure, not a public parameter.
+Curve extrapolation is automatic, not a public parameter.
 A successful attempt prints a console notice; failed or unsupported
 attempts use `RuntimeWarning`. The selected threshold is never silently
 changed. An unavailable estimate remains `NaN`.
@@ -126,14 +143,14 @@ single-frame stack produces N results; `single_frame=False` produces N-1
 overlapping adjacent pairs: `(1,2)`, `(2,3)`, ..., `(N-1,N)`. Paired mode
 needs at least two frames if a separate second input is omitted.
 
-With `batch_processing=False`, `current_frame` selects one **zero-based**
-frame. Paired mode also uses the following frame. A separate matching second
+With `batch_processing=False`, only the **first** frame is analyzed.
+Paired mode also uses the following frame. A separate matching second
 image/stack is retained as an optional paired-input form.
 
-`plot='auto'` and `plot=True` show only the `current_frame` result with
-batching ON or OFF. Paired mode shows the current-and-next-frame calculation.
+`plot=True` (default) shows only the first frame/pair
+regardless of batch mode; batch output still contains all computed results. Paired mode shows the first-and-second-frame calculation.
 `plot=False` hides previews; numerical batches and exported data remain complete.
-The demos use lowercase plot_results/save_results controls and keep saving separate.
+The demos keep numerical output separate from user-generated comparison plots and optional file exports.
 
 ### sFRC results and saved files
 
@@ -149,7 +166,7 @@ extrapolation_triggered, and resolution_nm. Labels use `frame0001` or
 
 ## sFSC
 
-Lateral and axial resolution estimation for 3D volumes using directional resolution inference (DRI).
+Lateral and axial resolution estimation for 3D volumes, with DRI.
 
 ### sFSC input and calibration
 
@@ -170,8 +187,8 @@ DRI angle parameters are in degrees and measured from the XY plane.
 | `single_frame` | `True` | Generate an XY-resampled pair from one volume |
 | `threshold` | `'1/7 hard threshold'` | Only alternative: `'3-sigma'` |
 | `mean_filter_width` | `3` | Correlation smoothing radius in frequency bins |
-| `plot_fitting_curve` | `False` | Additionally display the DRI fit diagnostics; the anisotropic resolution profile is always displayed |
-| `xy_mode` | `'slice'` | Lateral estimation from slices; `'3D'` uses the central Fourier plane |
+| `plot_fitting_curve` | `False` | Additionally display the DRI elliptical-fit figure; the resolution profile is always displayed |
+| `xy_mode` | `'slice'` | Optional: choose `'3D'` for low-SNR data |
 | `motion_correction` | `False` | Align paired inputs; not used for single-frame pair generation |
 
 ### sFSC curve extrapolation
@@ -202,14 +219,10 @@ failed attempts. It also records `extrapolation_stage`: `none`, `lateral`,
 the flag alone does not prove that the final selected curve was extrapolated.
 Inspect the notices and returned curve/fit information.
 
-### Directional resolution inference (DRI) and E_DRI
+### E_DRI: what the value means
 
-DRI infers the axial frequency cutoff by fitting a smooth directional
-frequency-support model to selected non-paraxial cutoff measurements, with
-the independently estimated lateral cutoff held fixed. The underlying
-frequency-support model has an elliptical form; **DRI** refers to the
-inference procedure as a whole. E_DRI is the cosine-weighted relative
-RMS fitting error:
+DRI fits an elliptical frequency model using the lateral anchor and selected
+directional cutoffs. E_DRI is the cosine-weighted relative RMS fitting error:
 
 $$
 E_{\mathrm{DRI}}=
@@ -219,7 +232,7 @@ E_{\mathrm{DRI}}=
 $$
 
 Here, `theta` is measured from the XY plane, `k_i` is a directional cutoff
-used in the fit, and `k_fit,i` is predicted by the fitted DRI model. This checks
+used in the fit, and `k_fit,i` is predicted by the fitted ellipse. This checks
 model consistency; it is not a ground-truth resolution error or confidence
 interval. Few usable directions or an incorrect calibration can still make a
 low-error result unreliable.
@@ -305,12 +318,21 @@ failed fits, early returns, and parameter/runtime errors. It is independent of
 plotting and of whether E_DRI is high. An unavailable value receives no grade.
 The guide stays in textual output rather than adding repetitive CSV columns.
 
+### sFSC numerical timing
+
+Each call returns `computation_time_seconds` (total numerical time, excluding
+its final Matplotlib profile/DRI-fit displays), and `stage_elapsed_seconds`
+with **only** `lateral` and `axial` (seconds). `lateral` includes input
+normalization/pair preparation and lateral FRC; `axial` includes Z sampling,
+resampling, FFT and directional FSC/DRI. Progress display overhead within the
+calculation is included. If lateral resolution is unavailable, `axial` is zero.
+The two stage values cover a single call, not the notebook-level two-run comparison.
+
 ### sFSC results, plotting and saved files
 
-`sFSC(...)` returns an sFSC result object containing the DRI-based lateral
-and axial resolution estimates. Its compact summary records singleframe,
-threshold, extrapolation trigger/stage, lateral/axial resolution in nm,
-and E_DRI in percent. Z-sampling status
+`sFSC(...)` returns a `DirectionalResolutionInference` result. Its compact
+summary records singleframe, threshold, extrapolation trigger/stage,
+lateral/axial resolution in nm, and E_DRI in percent. Z-sampling status
 and interpretation notes remain in the result fields and metadata.
 An available lateral/axial resolution profile is always displayed. There is
 no `plot` argument or `plot_results` demo setting for sFSC.
@@ -324,12 +346,7 @@ sFSC uses a 3D volume/pair and has no 2D-stack batch switch.
 | Numerical DRI data | `sFSC_DRI-data.npz` |
 | Interpretation | `sFSC_E-DRI-guidance.txt` |
 | Resolution preview (when available) | `sFSC_lateral-axial-resolution.png` |
-| Optional additional DRI-fit preview | `sFSC_DRI-elliptical-fit.png` (current legacy export filename) |
-
-The optional PNG filename above is retained for compatibility with the current
-`src/utils/save_results.py` implementation. It refers to the **DRI fit**, not
-a separate elliptical-resolution-fitting method; rename it in the code
-and this guide together if the exported filename is updated.
+| Optional additional fit preview | `sFSC_DRI-elliptical-fit.png` |
 
 ## srFRC
 
@@ -352,14 +369,13 @@ second image/stack remains an optional paired-input form.
 | `single_frame` | `True` | Generate a diagonal pair from each frame; False uses adjacent frames |
 | `threshold` | `'3-sigma'` | Only alternative: `'1/7 hard threshold'` |
 | `batch_processing` | `True` | Process every frame or adjacent pair |
-| `current_frame` | `0` | Zero-based preview frame; also selects computation when batching is False |
 | `stack_axis` | `0` | Frame axis: 0 for `(T,Y,X)`, 2 for `(Y,X,T)` |
-| `plot` | `'auto'` | Display only current_frame, independently of batching; False hides maps |
+| `plot` | `True` | Preview only the first frame/pair in either batch mode; False suppresses automatic plots |
 | `motion_correction` | `False` | Align paired frames before correlation |
 | `block_size` | `64` | Local window width; rounded up to an even integer |
 | `skip` | `2` | Rolling step, capped at half the window width |
-| `adaptive_background` | `True` | Use 1.2 times Otsu; forced False by monitor_change |
-| `monitor_change` | `False` | Compare Otsu multipliers 0.8, 1.0, and 1.2; takes priority |
+| `adaptive_background` | `True` | Use **0.8 × Otsu**; ignored when monitoring |
+| `monitor_change` | `False` | Compare **0.6, 0.8 and 1.0 × Otsu** on the first frame/pair; force non-batch mode |
 | `background_threshold` | `30` | Manual 0–255 intensity threshold, used only when both background switches are False |
 | `parallel` | `True` | Enable parallel rolling computation |
 | `patch_size` | `64` | Parallel patch width |
@@ -376,25 +392,33 @@ Correlation threshold is independent of the background-intensity controls.
 
 ### srFRC background parameter relationships
 
-`monitor_change=True` has priority and **forces `adaptive_background=False`**.
-This is a comparison mode, not a request for a single manual threshold.
+`monitor_change=True` has the highest priority: it sets
+`adaptive_background=False` **and** `batch_processing=False`, so only the first
+frame/pair is analyzed against three automatic background thresholds.
 
-| monitor_change | adaptive_background (effective) | Background thresholds | background_threshold |
+| `monitor_change` | Effective `adaptive_background` | Effective `batch_processing` | Background cutoff(s), on 0–255 intensity scale |
 | --- | --- | --- | --- |
-| `True` | `False`, forced | `0.8 x Otsu`, `1.0 x Otsu`, `1.2 x Otsu` | Ignored |
-| `False` | `True` | `1.2 x Otsu` | Ignored |
-| `False` | `False` | Fixed manual value | Used, default `30` |
+| `True` | `False` | `False` | `0.6 × Otsu`, `0.8 × Otsu`, `1.0 × Otsu` |
+| `False` | `True` | User setting | `0.8 × Otsu` |
+| `False` | `False` | User setting | Manual `background_threshold` (default `30`) |
 
-Both requested values of adaptive_background produce the same three comparisons
-when monitoring is True. A console notice explains the override; effective settings
-are stored in `analysis.parameters`. Three distinct map groups (`bg0.8`, `bg1.0`,
-`bg1.2`) and corresponding per-frame summary rows are retained. For a normal
-automatic run use `monitor_change=False, adaptive_background=True`; for a manual
-run use `monitor_change=False, adaptive_background=False, background_threshold=30`.
+The internal group names (`bg0.6`, `bg0.8`, `bg1.0`) refer to Otsu multipliers,
+**not** actual thresholds. The absolute computed cutoff for each frame/pair is
+reported as `background_threshold` in the results (0–255 units). Otsu is
+evaluated for each working pair; FRC correlation thresholds are independent of
+these background-intensity cutoffs.
 
-Otsu is evaluated for each working image pair. Manual and final reported intensity
-thresholds use the **0-255 scale**, independently of the normalized float32 image
-values. Correlation threshold choices never alter these intensity-scale units.
+For regular automatic mapping, use the defaults. For manual masking, use
+`monitor_change=False, adaptive_background=False` and specify
+`background_threshold`.
+
+### srFRC numerical timing
+
+Existing timing is unchanged: `computation_time_seconds` (alias
+`elapsed_seconds`), `background_elapsed_seconds`, and
+`frame_elapsed_seconds_by_background` are measured before any optional map
+plotting or export. Background and frame timings are nested in the total and
+must not be added to it.
 
 ### srFRC stack batching and plotting
 
@@ -403,46 +427,37 @@ single-frame stack produces N results; `single_frame=False` produces N-1
 overlapping adjacent pairs: `(1,2)`, `(2,3)`, ..., `(N-1,N)`. Paired mode
 needs at least two frames if a separate second input is omitted.
 
-With `batch_processing=False`, `current_frame` selects one **zero-based**
-frame. Paired mode also uses the following frame. A separate matching second
+With `batch_processing=False`, only the **first** frame is analyzed.
+Paired mode also uses the following frame. A separate matching second
 image/stack is retained as an optional paired-input form.
 
-`plot='auto'` and `plot=True` show only the `current_frame` result with
-batching ON or OFF. Paired mode shows the current-and-next-frame calculation.
+`plot=True` (default) shows only the first frame/pair
+regardless of batch mode; batch output still contains all computed results. Paired mode shows the first-and-second-frame calculation.
 `plot=False` hides previews; numerical batches and exported data remain complete.
-The demos use lowercase plot_results/save_results controls and keep saving separate.
+The demos keep numerical output separate from user-generated comparison plots and optional file exports.
 
-### srFRC monitored outputs and sjet comparison
+### srFRC monitored outputs and sJet comparison
 
-Monitoring keeps `bg0.8`, `bg1.0` and `bg1.2` as three separate groups. Previous
-maps and summary dictionaries retained them, but several convenience methods
-returned only the last group. They now return all monitored groups by default:
+In monitoring mode, all three background groups are retained separately. To
+access the computed maps or statistics, select a group if an array is required:
 
 ```python
-maps = analysis.get_rfrc_map()          # dict with bg0.8, bg1.0, bg1.2
-statistics = analysis.calculate_global()  # same keys; native-grid statistics
-panels = analysis.get_panels()         # one quality array per background group
-map08 = analysis.get_rfrc_map('bg0.8')  # select one group's array
+maps = analysis.get_rfrc_map()           # dict: bg0.6, bg0.8, bg1.0
+stats = analysis.calculate_global()      # native-grid statistics by group
+map_08 = analysis.get_rfrc_map('bg0.8')   # one numeric map in nm
 ```
 
-One-background runs keep their original NumPy-array return types. Monitoring
-returns dictionaries; callers needing an array should select a background label.
-The low-level iterate method likewise returns all monitored maps rather than
-overwriting its return value on each pass. Compatibility attributes rfrc_map,
-mean_res, min_res, max_res and rfrc_value still describe the last frame/group;
-the accessors above provide complete results. No statistics are recomputed after
-interpolation.
+The first frame/pair is previewed, with three maps shown side by side using
+sJet. Each group's **absolute** background threshold is reported in results;
+`bg0.8` is only an internal/export group ID. A single-background run returns
+its original NumPy array. Monitoring may return dictionaries from the
+convenience accessors; `rfrc_map` and other legacy scalar attributes refer to
+the last result/group and should not be used to enumerate monitored groups.
 
-All groups finish computing before the optional comparison is shown. The current
-frame/pair is displayed side by side for all groups, in one window. This avoids
-blocking on the first figure before later groups have finished. Every comparison
-axis and individual PNG uses sJet and the same display range. No warning text is
-embedded in the plots. Numerical results and per-frame summaries retain the full
-requested batch.
-
-Saving produces three distinct TIFFs and per-group CSVs named with bg0.8, bg1.0
-and bg1.2; optional current-frame PNGs retain those same group names. The combined
-CSV/JSON/NPZ exports remain available. Plotting and saving helpers remain in utils/.
+The export helper can write separate TIFF/CSV files for `bg0.6`, `bg0.8`, and
+`bg1.0`, alongside combined CSV/JSON/NPZ results. In a normal automatic run,
+the numeric map uses the `bg0.8` group label. All output maps retain original
+XY dimensions; their numerical values are not encoded as PNG colours.
 
 ### srFRC map restoration
 
@@ -492,39 +507,46 @@ background_threshold.
 | --- | --- |
 | Summary / metadata | `srFRC_results.csv`, `srFRC_results.json` |
 | Final map arrays | `srFRC_results.npz` |
-| Final numeric maps | `srFRC_bg1.2_resolution-map.tif`, `srFRC_manual-bg_resolution-map.tif` |
-| Optional per-frame preview | `srFRC_frame0001_bg1.2_resolution-map.png` |
+| Final numeric maps | `srFRC_bg0.8_resolution-map.tif`, `srFRC_manual-bg_resolution-map.tif` |
+| Optional per-frame preview | `srFRC_frame0001_bg0.8_resolution-map.png` |
 
 Frame identifiers use `frame0001`; pairs use `pair0001-0002`. Each background
 setting has a `(T,Y,X)` map array and a float32 TIFF with nm units, without
-normalization or colour-LUT conversion. The `bg1.2` label is an Otsu multiplier;
+normalization or colour-LUT conversion. The `bg0.8` label is an Otsu multiplier;
 the actual intensity threshold is stored in `background_threshold` and
 `final_background_thresholds`. Manual background uses `manual-bg`.
 TIFF, NPZ and summaries use the same final restored maps.
 
 ## Demo outputs
 
-Shared output-folder and utility conventions for the three demos:
+The project ships **three `.ipynb` notebooks** in `demos/`. Run them with
+JupyterLab or an editor supporting notebooks. They demonstrate the original
+sFRC single-/paired-frame comparison, sFSC Z-sampling comparison and srFRC
+background/parallel settings.
 
-The demos directly read explicit paths under project-root `example_data/`.
-They call the utilities only when saving is enabled. **`Path.cwd()/'results'`**
-is the output folder, independent of the input file's location.
+Plots are implemented in `src/utils/plotting.py` (`ResolutionPlotter`); older plotting helpers remain compatible wrappers.
 
-The `demos/` folder contains only `sFRC_demo.py`, `sFSC_demo.py` and
-`srFRC_demo.py`. Plot/export helpers are in **`utils/save_results.py`**; use
-`from utils.save_results import ...` in demos, tests and user scripts:
+The `src.utils.save_results` helpers write under **`Path.cwd() / 'results'`**
+when invoked; the core numerical entry points do not write files. An example
+import is:
 
-| Utility | Role |
+```python
+from src.utils.save_results import save_sfrc_results
+```
+
+| Utility | Output |
 | --- | --- |
-| `save_sfrc_results(result, plot=True)` | Compact summary, numerical curves, optional PNG previews |
-| `save_sfsc_results(result, plot_fitting_curve=False)` | Summary, DRI data, E_DRI guidance and an available resolution preview; optional extra fit PNG |
-| `save_srfrc_results(analysis, plot=True)` | Final maps, summary/metadata, float32 TIFF and optional previews |
+| `save_sfrc_results(result, plot=True)` | FRC curves, CSV/JSON summary and optional first-result PNG |
+| `save_sfsc_results(result, plot_fitting_curve=False)` | 3D resolution/DRI data, guidance and available PNG previews |
+| `save_srfrc_results(analysis, plot=True)` | Numeric maps (float32 TIFF/NPZ), CSV/JSON summary and optional first-result PNG |
 
-sFRC/srFRC numerical exports do not require plotting and retain the current-frame
-preview rule. The sFSC save helper has no `plot` switch and includes the
-resolution PNG whenever the estimate is available. File writing remains an
-optional demo step controlled by `save_results`. No save switch, output directory, or base-name
-parameter is added to the core API.
+| Example file | Meaning |
+| --- | --- |
+| `sFRC_results.csv` | Global 2D resolution (nm) by frame/pair |
+| `sFSC_results.csv` | Lateral/axial resolution (nm) and E_DRI (%) |
+| `srFRC_bg0.8_resolution-map.tif` | Float32 numeric resolution map for the default automatic background |
+| `srFRC_bg0.6_resolution-map.tif` | One group from a monitored run |
 
-See the result/file subsection of each analysis above for its filenames.
-Repeated runs overwrite matching filenames and leave other result files intact.
+Saved TIFFs retain numeric nm values; `0` indicates background/invalid local
+estimation rather than 0 nm resolution. Existing named files may be overwritten
+by repeated runs. File export is independent of plot display.

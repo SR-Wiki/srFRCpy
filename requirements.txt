@@ -1,7 +1,13 @@
-numpy
-scipy
-scikit-image
-matplotlib
-Pillow
-tifffile
-tqdm
+# Runtime requirements: Python 3.10–3.12 (recommended: Python 3.10).
+# NumPy 2.x is required: src/utils/angle_mask.py uses np.asin (NumPy 2 alias).
+# Constrain compiled scientific libraries together to avoid incompatible NumPy ABI builds.
+# Version ranges are compatibility targets, not a fully tested cross-platform lockfile.
+numpy>=2.0,<2.3
+scipy>=1.14,<1.16
+scikit-image>=0.24,<0.26
+matplotlib>=3.9,<3.11
+Pillow>=10.4,<12
+tifffile>=2024.9.20,<2025
+# scikit-image needs imageio; exclude 2.35.0 due to its incompatible NumPy pin.
+imageio>=2.33,!=2.35.0,<3
+tqdm>=4.66,<5

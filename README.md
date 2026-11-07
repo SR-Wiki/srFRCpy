@@ -33,6 +33,18 @@ The framework addresses these problems with **single-frame FRC (sFRC)** and **si
 ### Tested platform
   - Windows 10, Python = 3.10.0
 
+### Dependencies
+| Package | Supported range | 
+| --- | --- | 
+| NumPy | `>=2.0,<2.3` | 
+| SciPy | `>=1.14,<1.16` | 
+| scikit-image | `>=0.24,<0.26` | 
+| Matplotlib | `>=3.9,<3.11` | 
+| Pillow | `>=10.4,<12` | 
+| tifffile | `>=2024.9.20,<2025` | 
+| imageio | `>=2.33,!=2.35.0,<3` | 
+| tqdm | `>=4.66,<5` | 
+
 ### 1. Clone or download the repository
 
 ```bash
@@ -51,15 +63,6 @@ conda activate srFRC
 
 
 ### 3. Install dependencies
-The current source code uses the following external packages:
-
-- NumPy
-- SciPy
-- scikit-image
-- Matplotlib
-- tifffile
-- tqdm
-- Pillow
 
 After activating the `srFRC` environment, install the required packages from the provided `requirements.txt` file:
 

@@ -284,7 +284,7 @@ def apply_correction(single_frc, geometry=None):
         return np.zeros_like(values)
     ad = _correction_factors(len(values), geometry)
     corrected = np.array(
-        (1 + ad + 1e-4) * values / (1 + ad * values + 1e-4),
+        (ad * values + 1e-4) / (1 + (ad-1) * values + 1e-4),
         dtype=values.dtype,
     )
     crossing = np.flatnonzero(corrected <= 1 / 7)

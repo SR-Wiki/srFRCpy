@@ -277,23 +277,23 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
         warnings.warn(f'sFSC - lateral: {detail}. Axial resolution and E_DRI are unavailable; check the pixel size and threshold. {DRI_GUIDANCE}',
                       RuntimeWarning,stacklevel=2)
         # Preserve the usual return type, marking all unavailable quantities.
-        erf=DirectionalResolutionInference(max_spacing,1,single_frame=single_frame,z_sampling=z_sampling,
+        dri=DirectionalResolutionInference(max_spacing,1,single_frame=single_frame,z_sampling=z_sampling,
             low_angle=low_angle,high_angle=high_angle,num_cones=num_cones,threshold=threshold)
-        erf.xy_resolution,erf.xy_cutoff,erf.z_resolution,erf.z_cutoff=np.nan,np.nan,np.nan,np.nan
-        erf.angles,erf.cutoffs=np.empty(0),np.empty(0)
-        erf.summary=dict(lateral_resolution_nm=np.nan,axial_resolution_nm=np.nan,E_DRI_percent=np.nan,
+        dri.xy_resolution,dri.xy_cutoff,dri.z_resolution,dri.z_cutoff=np.nan,np.nan,np.nan,np.nan
+        dri.angles,dri.cutoffs=np.empty(0),np.empty(0)
+        dri.summary=dict(lateral_resolution_nm=np.nan,axial_resolution_nm=np.nan,E_DRI_percent=np.nan,
             singleframe=bool(single_frame),threshold=threshold,
             extrapolation_triggered=bool(lateral_triggered),extrapolation_stage='lateral' if lateral_triggered else 'none')
-        erf.parameters=parameters
-        erf.z_sampling_enabled=bool(z_sampling)
-        erf.lateral_curve=selected_frc
-        erf.selected_plane=selected_plane
+        dri.parameters=parameters
+        dri.z_sampling_enabled=bool(z_sampling)
+        dri.lateral_curve=selected_frc
+        dri.selected_plane=selected_plane
         lateral_seconds = time.perf_counter() - lateral_started
-        erf.computation_time_seconds = time.perf_counter() - computation_started
-        erf.stage_elapsed_seconds = dict(lateral=lateral_seconds, axial=0.0)
-        print(f'sFSC - numerical computation time: {erf.computation_time_seconds:.3f} s '
+        dri.computation_time_seconds = time.perf_counter() - computation_started
+        dri.stage_elapsed_seconds = dict(lateral=lateral_seconds, axial=0.0)
+        print(f'sFSC - numerical computation time: {dri.computation_time_seconds:.3f} s '
               '(axial computation unavailable; excludes plotting and file export).')
-        return erf
+        return dri
 
     if xy_mode == 'slice' and selected_plane is not None:
         print(f'sFSC - lateral: selected Z plane {selected_plane} (zero-based).')
@@ -331,7 +331,7 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
     fftb = fft_backend.fftshift(fft_backend.fftn(tmp_im2))
 
     print('sFSC - DRI: fitting directional cutoffs...')
-    erf = DirectionalResolutionInference(
+    dri = DirectionalResolutionInference(
         max_spacing, xy_resolution,
         single_frame=single_frame,
         z_sampling=z_sampling,
@@ -342,33 +342,34 @@ def sFSC(im1, im2=None, pixel_size=None, mean_filter_width=3, xy_mode='slice',
         extrapolation=extrapolation,
     )
     try:
-        erf.fit(ffta,fftb)
+        dri.fit(ffta,fftb)
     except RuntimeError as error:
         warnings.warn(f'sFSC - axial: the DRI fit could not provide an estimate ({error}). Check the fitting angles and voxel calibration.',RuntimeWarning,stacklevel=2)
-        erf.z_resolution,erf.z_cutoff=np.nan,np.nan
-    if not np.isfinite(erf.goodness_of_fit):print(f'E_DRI is unavailable because no usable DRI fit was obtained. {DRI_GUIDANCE}')
-    z_resolution,_=erf.get_z_resolution()
-    erf.z_sampling_enabled=bool(z_sampling)
-    erf.interpretation_note=z_sampling_note(single_frame,z_sampling,z_resolution)
-    if erf.interpretation_note: print('sFSC - axial: '+erf.interpretation_note)
-    stage=('lateral and axial' if erf.extrapolation_attempted else 'lateral') if lateral_triggered else ('axial' if erf.extrapolation_attempted else 'none')
-    row=dict(lateral_resolution_nm=xy_resolution,axial_resolution_nm=z_resolution,E_DRI_percent=100*erf.goodness_of_fit,
+        dri.z_resolution,dri.z_cutoff=np.nan,np.nan
+    if not np.isfinite(dri.goodness_of_fit):print(f'E_DRI is unavailable because no usable DRI fit was obtained. {DRI_GUIDANCE}')
+    z_resolution,_=dri.get_z_resolution()
+    dri.z_sampling_enabled=bool(z_sampling)
+    dri.interpretation_note=z_sampling_note(single_frame,z_sampling,z_resolution)
+    if dri.interpretation_note: print('sFSC - axial: '+dri.interpretation_note)
+    stage=('lateral and axial' if dri.extrapolation_attempted else 'lateral') if lateral_triggered else ('axial' if dri.extrapolation_attempted else 'none')
+    row=dict(lateral_resolution_nm=xy_resolution,axial_resolution_nm=z_resolution,E_DRI_percent=100*dri.goodness_of_fit,
              singleframe=bool(single_frame),threshold=threshold,
-             extrapolation_triggered=bool(lateral_triggered or erf.extrapolation_attempted),extrapolation_stage=stage)
-    erf.summary=row
-    erf.parameters=parameters
-    erf.lateral_curve=selected_frc
-    erf.selected_plane=selected_plane
+             extrapolation_triggered=bool(lateral_triggered or dri.extrapolation_attempted),extrapolation_stage=stage)
+    dri.summary=row
+    dri.parameters=parameters
+    dri.lateral_curve=selected_frc
+    dri.selected_plane=selected_plane
     axial_seconds = time.perf_counter() - axial_started
-    erf.computation_time_seconds = time.perf_counter() - computation_started
-    erf.stage_elapsed_seconds = dict(lateral=lateral_seconds, axial=axial_seconds)
-    print(f'sFSC - numerical computation time: {erf.computation_time_seconds:.3f} s '
+    dri.computation_time_seconds = time.perf_counter() - computation_started
+    dri.stage_elapsed_seconds = dict(lateral=lateral_seconds, axial=axial_seconds)
+    print(f'sFSC - numerical computation time: {dri.computation_time_seconds:.3f} s '
           '(excludes plotting and file export).')
-    for name, seconds in erf.stage_elapsed_seconds.items():
+    for name, seconds in dri.stage_elapsed_seconds.items():
         print(f'  {name}: {seconds:.3f} s')
+    print(f'\nsFSC - axial resolution: {z_resolution:.2f} nm')
     if np.isfinite(z_resolution):
-        polar_plot(erf,show=True)
+        polar_plot(dri,show=True)
     if plot_fitting_curve and np.isfinite(z_resolution):
         from src.utils.plotting import ResolutionPlotter
-        ResolutionPlotter.dri_fit(erf, show=True)
-    return erf
+        ResolutionPlotter.dri_fit(dri, show=True)
+    return dri

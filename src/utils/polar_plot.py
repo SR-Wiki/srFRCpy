@@ -8,9 +8,9 @@ def radians_to_degrees(angle):
     return 0 if angle == 0 else angle * 180.0 / np.pi
 
 
-def polar_plot(erf, use_valid=False, save_path=None, show=False):
+def polar_plot(dri, use_valid=False, save_path=None, show=False):
     """Compatibility wrapper; use ResolutionPlotter.sfsc_polar directly."""
-    return ResolutionPlotter.sfsc_polar(erf, use_valid=use_valid, save_path=save_path, show=show)
+    return ResolutionPlotter.sfsc_polar(dri, use_valid=use_valid, save_path=save_path, show=show)
 
 
 def polar_plot_V0(xy_resolution, z_resolution, save_path=None, show=False):

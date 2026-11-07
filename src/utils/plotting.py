@@ -155,12 +155,12 @@ class ResolutionPlotter:
 
 
     @staticmethod
-    def sfsc_polar(erf, use_valid=False, save_path=None, show=False):
+    def sfsc_polar(dri, use_valid=False, save_path=None, show=False):
         """Plot the fitted 3D anisotropic resolution profile without diagnostic text.
 
         Parameters
         ----------
-        erf : DirectionalResolutionInference
+        dri : DirectionalResolutionInference
             Fitted lateral/axial resolution model.
         use_valid : bool
             Compatibility flag; measured points are currently omitted from the polar
@@ -180,12 +180,12 @@ class ResolutionPlotter:
         Resolution radii are in nm. Optional save_path controls this visualization utility;
         core numerical functions do not write files.
         """
-        xy_resolution, a = erf.get_xy_resolution()
-        z_resolution, b = erf.get_z_resolution()
+        xy_resolution, a = dri.get_xy_resolution()
+        z_resolution, b = dri.get_z_resolution()
         valid_angles = []
         valid_resolutions = []
         if use_valid:
-            for angle, resolution in zip(erf.get_angles(), erf.get_resolutions()):
+            for angle, resolution in zip(dri.get_angles(), dri.get_resolutions()):
                 valid_angles.append(angle)
                 valid_angles.append(np.pi - angle)
                 valid_angles.append(np.pi + angle)
@@ -285,9 +285,9 @@ class ResolutionPlotter:
         """
         a = 1000 / xy_resolution
         b = 1000 / z_resolution
-        # valid_angles = erf.get_angles()
-        # valid_resolutions = erf.get_resolutions()
-        # low_angle, high_angle, num_cones = erf.get_angle_range()
+        # valid_angles = dri.get_angles()
+        # valid_resolutions = dri.get_resolutions()
+        # low_angle, high_angle, num_cones = dri.get_angle_range()
         # angles = np.linspace(low_angle, high_angle, num_cones)
         # angle_step = angles[1] - angles[0]
         # num = math.ceil(2 * np.pi / angle_step)

@@ -2,6 +2,8 @@
 
 Python implementation of the single-acquisition sFRC/sFSC resolution-estimation framework.
 
+**Note: this repository is still in heavy development.** If you encounter any issues or unexpected behavior, please [file an issue](https://github.com/SR-Wiki/srFRCpy/issues).
+
 ## Publication
 
 This repository accompanies the manuscript:
@@ -13,8 +15,6 @@ Final bibliographic information and DOI will be added after publication.
 **Other implementations:** [Fiji/ImageJ / srFRCj](https://github.com/SR-Wiki/srFRCj) · [MATLAB / srFRCm](https://github.com/SR-Wiki/srFRCm)
 
 [Introduction](#introduction) · [Installation](#installation) · [Demo scripts](#demo-scripts) · [Basic parameters](#basic-parameters) · [Version](#version) · [Resources](#resources) · [License](#license)
-
-> **Note:** This is the first public release. Some rough edges may still be expected. If you encounter any issues or unexpected behavior, please [open an issue](https://github.com/SR-Wiki/srFRCpy/issues).
 
 ## Introduction
 

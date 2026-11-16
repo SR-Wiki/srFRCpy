@@ -84,9 +84,9 @@ demo if your files differ.
 
 
 ```bash
-python demos/sFRC_demo.ipynb
-python demos/sFSC_demo.ipynb
-python demos/srFRC_demo.ipynb
+demos/sFRC_demo.ipynb
+demos/sFSC_demo.ipynb
+demos/srFRC_demo.ipynb
 ```
 
 Python sampling is in nm; stacks use TYX and sFSC volumes ZYX with spacing
@@ -108,15 +108,15 @@ docstrings in `src/` describe the inputs and returned data.
 
 | Parameter | Default / source | Description |
 | --- | --- | --- |
-| Pixel Size | image calibration or user input | Physical lateral sampling in nm |
+| Pixel Size | user input | Physical lateral sampling in nm |
 | If SingleFrame | `true` | Generates the complementary pair from one acquisition |
 
 ### sFSC
 
 | Parameter | Default / source | Description |
 | --- | --- | --- |
-| Pixel Size (XY) | image calibration or user input | Physical lateral voxel spacing in nm |
-| Pixel Size (Z) | image calibration or user input | Physical axial voxel spacing in nm |
+| Pixel Size (XY) | user input | Physical lateral voxel spacing in nm |
+| Pixel Size (Z) | user input | Physical axial voxel spacing in nm |
 | If SingleFrame | `true` | Enables single-volume pair generation |
 
 ### srFRC

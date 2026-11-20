@@ -4,7 +4,7 @@ import warnings
 
 ANGLE_GUIDANCE = 'Recommended DRI fitting angles: lowAngle > 10 degrees and highAngle < 80 degrees.'
 FIT_RANGE_ADVICE = 'Consider adjusting the DRI fitting angle range, then repeat the analysis. Recommended DRI fitting angles: lowAngle > 10 degrees and highAngle < 80 degrees.'
-Z_SAMPLING_NOTE = 'Z sampling is OFF and can be enabled manually. If the axial resolution appears overly optimistic (too small), enable Z sampling and repeat the analysis to compare the estimates.'
+Z_SAMPLING_NOTE = 'Z sampling is OFF and can be enabled manually. If the axial resolution appears overly optimistic (too small), enable Z sampling and repeat the analysis.'
 
 def resolve_z_sampling(value):
     """Resolve the manual Z-sampling option.
